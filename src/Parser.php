@@ -135,7 +135,7 @@ final class Parser
 
         // JSON-style array
         if (str_starts_with($raw, '[') && str_ends_with($raw, ']')) {
-        return json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
+            return json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
         }
 
         // fallback: quoted or bare string
