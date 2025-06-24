@@ -61,6 +61,7 @@ final class Loader
      *
      * @param string[] $names
      * @return Config
+     * @throws \JsonException
      */
     public function load(array $names): Config
     {
