@@ -1,0 +1,17 @@
+parameters:
+    level: 8
+    paths:
+        - src
+    
+    # Ignore specific errors if needed
+    ignoreErrors:
+        # Add specific ignores here if needed
+    
+    # Check for unused variables
+    checkMissingIterableValueType: true
+    checkGenericClassInNonGenericObjectType: true
+    
+    # Stricter rules
+    checkTooWideReturnTypesInProtectedAndPublicMethods: true
+    checkUninitializedProperties: true
+    checkDynamicProperties: true
