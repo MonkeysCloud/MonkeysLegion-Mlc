@@ -47,6 +47,9 @@ use Psr\SimpleCache\CacheInterface;
  */
 final class Loader
 {
+    /**
+     * Whether environment variables have been loaded.
+     */
     private bool $envLoaded = false;
     private ?ConfigValidator $validator = null;
     private bool $autoFreeze = true;
@@ -294,47 +297,81 @@ final class Loader
 
         $dir = $this->envDir ?? $this->baseDir;
 
-        // Ensure directory exists
         if (!is_dir($dir)) {
             $this->envLoaded = true;
             return;
         }
 
-        try {
-            // Load .env and .env.local if they exist
-            $dotenv = Dotenv::createImmutable($dir);
-            
-            // Base .env
-            if (file_exists($dir . '/.env')) {
-                $dotenv->safeLoad();
-            }
+        // 1. Resolve APP_ENV (checked in this order: Server/Env vars -> .env.local -> .env)
+        $appEnv = $this->resolveAppEnv($dir);
 
-            // Get APP_ENV if it was set
-            $appEnv = $_ENV['APP_ENV'] ?? $_SERVER['APP_ENV'] ?? null;
+        // 2. Build priority list (Most specific first -> Least specific last)
+        $candidates = [];
 
-            // Load .env.{APP_ENV} and .env.{APP_ENV}.local
-            if ($appEnv !== null) {
-                if (file_exists($dir . "/.env.{$appEnv}")) {
-                    $dotenv = Dotenv::createImmutable($dir, ".env.{$appEnv}");
-                    $dotenv->safeLoad();
-                }
-                
-                if (file_exists($dir . "/.env.{$appEnv}.local")) {
-                    $dotenv = Dotenv::createImmutable($dir, ".env.{$appEnv}.local");
-                    $dotenv->safeLoad();
-                }
-            }
+        if ($appEnv !== null) {
+            $candidates[] = ".env.{$appEnv}.local";
+            $candidates[] = ".env.{$appEnv}";
+        }
 
-            // Load .env.local (takes precedence over .env.{APP_ENV})
-            if (file_exists($dir . '/.env.local')) {
-                $dotenv = Dotenv::createImmutable($dir, '.env.local');
-                $dotenv->safeLoad();
+        $candidates[] = '.env.local';
+        $candidates[] = '.env';
+
+        // 3. Filter for existing files
+        $filesToLoad = [];
+        foreach ($candidates as $file) {
+            if (file_exists($dir . '/' . $file)) {
+                $filesToLoad[] = $file;
             }
-        } catch (InvalidPathException $e) {
-            // .env files don't exist, that's okay
+        }
+
+        // 4. Load valid files (Immutability ensures first loaded value wins)
+        if (!empty($filesToLoad)) {
+            try {
+                // We use load() because we've already vetted file existence
+                Dotenv::createImmutable($dir, $filesToLoad)->load();
+            } catch (InvalidPathException $e) {
+                // Should not happen since we checked file_exists, but safe fallback
+            }
         }
 
         $this->envLoaded = true;
+    }
+
+    /**
+     * Resolve APP_ENV without fully loading .env files.
+     */
+    private function resolveAppEnv(string $dir): ?string
+    {
+        // 1. Check existing environment
+        if (isset($_SERVER['APP_ENV'])) {
+            return (string)$_SERVER['APP_ENV'];
+        }
+        if (isset($_ENV['APP_ENV'])) {
+            return (string)$_ENV['APP_ENV'];
+        }
+
+        // 2. Peek into .env.local and .env
+        $filesToCheck = ['.env.local', '.env'];
+
+        foreach ($filesToCheck as $file) {
+            $path = $dir . '/' . $file;
+            if (!file_exists($path)) {
+                continue;
+            }
+
+            $content = file_get_contents($path);
+            if ($content === false) {
+                continue;
+            }
+
+            // Simple regex to find APP_ENV=value
+            // Supports: APP_ENV=dev, APP_ENV="dev", APP_ENV='dev'
+            if (preg_match('/^\s*APP_ENV=(?:["\']?)([^"\'].+?)(?:["\']?)\s*$/m', $content, $matches)) {
+                return trim($matches[1]);
+            }
+        }
+
+        return null;
     }
 
     /**
