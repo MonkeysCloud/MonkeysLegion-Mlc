@@ -1,0 +1,206 @@
+# Example App Configuration
+
+app_name = "MonkeysLegion Application"
+app_env = production
+app_debug = false
+app_url = https://example.com
+
+# Application settings
+app {
+    name = "MonkeysLegion App"
+    version = "2.0.0"
+    timezone = "UTC"
+    locale = "en"
+    
+    # Feature flags
+    features {
+        api_v2 = true
+        websockets = true
+        analytics = false
+    }
+}
+
+# Database configuration
+database {
+    default = mysql
+    
+    connections {
+        mysql {
+            driver = mysql
+            host = localhost
+            port = 3306
+            database = monkeyslegion
+            username = root
+            password = ${DB_PASSWORD}
+            charset = utf8mb4
+            collation = utf8mb4_unicode_ci
+            prefix = ""
+            strict = true
+            engine = InnoDB
+        }
+        
+        redis {
+            host = 127.0.0.1
+            port = 6379
+            password = ${REDIS_PASSWORD}
+            database = 0
+        }
+    }
+}
+
+# Cache configuration
+cache {
+    default = redis
+    prefix = mlc_
+    
+    stores {
+        file {
+            driver = file
+            path = /tmp/cache
+        }
+        
+        redis {
+            driver = redis
+            connection = redis
+            lock_connection = redis
+        }
+    }
+}
+
+# Logging
+logging {
+    default = stack
+    
+    channels {
+        stack {
+            driver = stack
+            channels = ["daily", "slack"]
+            ignore_exceptions = false
+        }
+        
+        daily {
+            driver = daily
+            path = /var/log/app.log
+            level = debug
+            days = 14
+        }
+    }
+}
+
+# Security
+security {
+    encryption_key = ${APP_KEY}
+    
+    cors {
+        allowed_origins = [
+            "https://app.example.com",
+            "https://admin.example.com"
+        ]
+        allowed_methods = ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+        allowed_headers = ["Content-Type", "Authorization"]
+        exposed_headers = ["X-Total-Count"]
+        max_age = 3600
+        supports_credentials = true
+    }
+    
+    rate_limiting {
+        enabled = true
+        max_attempts = 60
+        decay_minutes = 1
+    }
+}
+
+# Mail configuration
+mail {
+    default = smtp
+    
+    mailers {
+        smtp {
+            transport = smtp
+            host = ${MAIL_HOST}
+            port = 587
+            encryption = tls
+            username = ${MAIL_USERNAME}
+            password = ${MAIL_PASSWORD}
+            timeout = 30
+        }
+    }
+    
+    from {
+        address = "noreply@example.com"
+        name = "MonkeysLegion"
+    }
+}
+
+# API configuration
+api {
+    version = "v2"
+    prefix = "/api/v2"
+    
+    rate_limits {
+        default = 60
+        authenticated = 600
+        premium = 6000
+    }
+    
+    pagination {
+        default_per_page = 20
+        max_per_page = 100
+    }
+}
+
+# Queue configuration
+queue {
+    default = redis
+    
+    connections {
+        redis {
+            driver = redis
+            connection = redis
+            queue = default
+            retry_after = 90
+            block_for = 5
+        }
+    }
+    
+    failed {
+        driver = database
+        database = mysql
+        table = failed_jobs
+    }
+}
+
+# Session configuration
+session {
+    driver = redis
+    lifetime = 120
+    expire_on_close = false
+    encrypt = false
+    
+    cookie {
+        name = monkeyslegion_session
+        path = /
+        domain = ${SESSION_DOMAIN}
+        secure = true
+        http_only = true
+        same_site = lax
+    }
+}
+
+# Monitoring
+monitoring {
+    enabled = true
+    
+    sentry {
+        dsn = ${SENTRY_DSN}
+        environment = ${APP_ENV}
+        traces_sample_rate = 0.2
+    }
+    
+    metrics {
+        enabled = true
+        driver = statsd
+        host = localhost
+        port = 8125
+    }
+}
