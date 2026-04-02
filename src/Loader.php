@@ -62,14 +62,20 @@ final class Loader
      * @param string|null $envDir Directory containing .env files (defaults to baseDir)
      * @param CacheInterface|null $cache Optional PSR-16 cache implementation
      * @param bool $autoLoadEnv Automatically load .env files (default: true)
+     * @param bool $strictSecurity Throw exceptions if files are world-writable (default: false)
      */
     public function __construct(
         private Parser $parser,
         private string $baseDir,
         private ?string $envDir = null,
         private ?CacheInterface $cache = null,
-        private bool $autoLoadEnv = true
+        private bool $autoLoadEnv = true,
+        bool $strictSecurity = false
     ) {
+        if ($strictSecurity) {
+            $this->parser->enableStrictSecurity();
+        }
+
         // Validate base directory
         if (!is_dir($this->baseDir)) {
             throw new LoaderException(

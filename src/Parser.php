@@ -33,6 +33,13 @@ final class Parser
 
     private int $currentLine = 0;
     private string $currentFile = '';
+    private bool $strictSecurity = false;
+
+    public function enableStrictSecurity(bool $strict = true): self
+    {
+        $this->strictSecurity = $strict;
+        return $this;
+    }
 
     /**
      * Parse a .mlc configuration file.
@@ -402,10 +409,17 @@ final class Parser
         if ($perms !== false) {
             // Check if world-writable
             if (($perms & 0002) !== 0) {
-                trigger_error(
-                    "Config file '{$file}' is world-writable (security risk)",
-                    E_USER_WARNING
+                $message = sprintf(
+                    "Config file '%s' is world-writable (perms: %04o). This is a severe security risk.",
+                    $file,
+                    $perms & 0777
                 );
+
+                if ($this->strictSecurity) {
+                    throw new SecurityException($message);
+                }
+                
+                trigger_error($message, E_USER_WARNING);
             }
         }
     }

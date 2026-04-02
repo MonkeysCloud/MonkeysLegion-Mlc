@@ -16,7 +16,7 @@ This roadmap outlines the evolution of the MonkeysLegion MLC configuration libra
 *Focus: Addressing critical gaps identified in the v2.x security audit.*
 
 ### 1.1 Robust Environment Variable expansion
-- **Task**: Implement `${VAR}` and `${VAR:-default}` syntax parsing in `Parser.php`.
+- [x] **Task**: Implement `${VAR}` and `${VAR:-default}` syntax parsing in `Parser.php`.
 - **Technical Detail**: 
     - Update `parseValue()` to detect `${}` patterns.
     - Use `env()` helper function for lookup.
@@ -24,14 +24,14 @@ This roadmap outlines the evolution of the MonkeysLegion MLC configuration libra
 - **Priority**: High (Critical)
 
 ### 1.2 "True" Circular Reference Detection
-- **Task**: Replace depth-limiting with a reference-tracking algorithm.
+- [x] **Task**: Replace depth-limiting with a reference-tracking algorithm.
 - **Technical Detail**: 
     - Maintain a stack of "currently resolving keys" during parsing.
     - If a key references another key (planned feature 3.0) that is already in the stack, throw a `CircularReferenceException`.
 - **Priority**: Medium
 
 ### 1.3 Strict Permission Auditing
-- **Task**: Upgrade `validateFileAccess` warnings to exceptions for production.
+- [x] **Task**: Upgrade `validateFileAccess` warnings to exceptions for production.
 - **Technical Detail**: 
     - Add a `strict_security` flag to `Parser` and `Loader`.
     - Throw `SecurityException` if a file is world-writable and `strict_security` is true.
