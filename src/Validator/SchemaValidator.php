@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace MonkeysLegion\Mlc\Validator;
 
+use MonkeysLegion\Mlc\Contracts\ConfigValidatorInterface;
+
 /**
  * Schema-based configuration validator.
  *
@@ -27,7 +29,7 @@ namespace MonkeysLegion\Mlc\Validator;
  *     ],
  * ]
  */
-final class SchemaValidator implements ConfigValidator
+final class SchemaValidator implements ConfigValidatorInterface
 {
     /** @var array<int, string> */
     private array $errors = [];

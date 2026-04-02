@@ -7,7 +7,7 @@ namespace MonkeysLegion\Mlc;
 use Dotenv\Dotenv;
 use Dotenv\Exception\InvalidPathException;
 use MonkeysLegion\Mlc\Exception\LoaderException;
-use MonkeysLegion\Mlc\Validator\ConfigValidator;
+use MonkeysLegion\Mlc\Contracts\ConfigValidatorInterface;
 use Psr\SimpleCache\CacheInterface;
 
 /**
@@ -51,7 +51,7 @@ final class Loader
      * Whether environment variables have been loaded.
      */
     private bool $envLoaded = false;
-    private ?ConfigValidator $validator = null;
+    private ?ConfigValidatorInterface $validator = null;
     private bool $autoFreeze = true;
 
     /**
@@ -231,7 +231,7 @@ final class Loader
     /**
      * Set a validator instance.
      */
-    public function setValidator(?ConfigValidator $validator): self
+    public function setValidator(?ConfigValidatorInterface $validator): self
     {
         $this->validator = $validator;
         return $this;

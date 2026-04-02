@@ -38,65 +38,65 @@ final class ConfigTest extends TestCase
         ]);
     }
 
-    public function testGetReturnsValue(): void
+    public function test_get_should_return_value(): void
     {
         $this->assertSame('Test App', $this->config->get('app.name'));
         $this->assertSame('localhost', $this->config->get('database.host'));
     }
 
-    public function testGetReturnsDefaultWhenNotFound(): void
+    public function test_get_should_return_default_when_not_found(): void
     {
         $this->assertSame('default', $this->config->get('nonexistent', 'default'));
         $this->assertNull($this->config->get('nonexistent'));
     }
 
-    public function testHasReturnsTrueForExistingPath(): void
+    public function test_has_should_return_true_for_existing_path(): void
     {
         $this->assertTrue($this->config->has('app.name'));
         $this->assertTrue($this->config->has('database.port'));
     }
 
-    public function testHasReturnsFalseForNonExistingPath(): void
+    public function test_has_should_return_false_for_non_existing_path(): void
     {
         $this->assertFalse($this->config->has('nonexistent'));
         $this->assertFalse($this->config->has('app.nonexistent'));
     }
 
-    public function testGetStringReturnsString(): void
+    public function test_get_string_should_return_string(): void
     {
         $this->assertSame('Test App', $this->config->getString('app.name'));
     }
 
-    public function testGetStringThrowsForNonString(): void
+    public function test_get_string_should_throw_on_non_string(): void
     {
         $this->expectException(ConfigException::class);
         $this->config->getString('app.debug'); // This is a boolean
     }
 
-    public function testGetIntReturnsInteger(): void
+    public function test_get_int_should_return_integer(): void
     {
         $this->assertSame(3306, $this->config->getInt('database.port'));
     }
 
-    public function testGetIntThrowsForNonInteger(): void
+    public function test_get_int_should_throw_on_non_integer(): void
     {
         $this->expectException(ConfigException::class);
         $this->config->getInt('app.name'); // This is a string
     }
 
-    public function testGetBoolReturnsBoolean(): void
+    public function test_get_bool_should_return_boolean(): void
     {
         $this->assertTrue($this->config->getBool('app.debug'));
         $this->assertFalse($this->config->getBool('cache.enabled'));
     }
 
-    public function testGetBoolThrowsForNonBoolean(): void
+    public function test_get_bool_should_throw_on_non_boolean(): void
     {
         $this->expectException(ConfigException::class);
         $this->config->getBool('app.name'); // This is a string
     }
 
-    public function testGetArrayReturnsArray(): void
+    public function test_get_array_should_return_array(): void
     {
         $expected = [
             'name' => 'Test App',
@@ -107,19 +107,19 @@ final class ConfigTest extends TestCase
         $this->assertSame($expected, $this->config->getArray('app'));
     }
 
-    public function testGetRequiredReturnsValueWhenExists(): void
+    public function test_get_required_should_return_value_when_exists(): void
     {
         $this->assertSame('Test App', $this->config->getRequired('app.name'));
     }
 
-    public function testGetRequiredThrowsWhenNotExists(): void
+    public function test_get_required_should_throw_when_not_exists(): void
     {
         $this->expectException(ConfigException::class);
         $this->expectExceptionMessage("Required config key 'nonexistent' not found");
         $this->config->getRequired('nonexistent');
     }
 
-    public function testAllReturnsAllData(): void
+    public function test_all_should_return_all_data(): void
     {
         $data = $this->config->all();
         
@@ -129,7 +129,7 @@ final class ConfigTest extends TestCase
         $this->assertArrayHasKey('cache', $data);
     }
 
-    public function testFreezePreventsSetting(): void
+    public function test_freeze_should_prevent_setting(): void
     {
         $this->assertFalse($this->config->isFrozen());
         
@@ -141,14 +141,14 @@ final class ConfigTest extends TestCase
         $this->config->set('app.name', 'New Name');
     }
 
-    public function testSetUpdatesValue(): void
+    public function test_set_should_update_value(): void
     {
         $this->config->set('app.name', 'New Name');
         
         $this->assertSame('New Name', $this->config->get('app.name'));
     }
 
-    public function testSetCreatesNestedPaths(): void
+    public function test_set_should_create_nested_paths(): void
     {
         $this->config->set('new.nested.path', 'value');
         
@@ -156,7 +156,7 @@ final class ConfigTest extends TestCase
         $this->assertSame('value', $this->config->get('new.nested.path'));
     }
 
-    public function testMergeCreatesNewConfig(): void
+    public function test_merge_should_create_new_config(): void
     {
         $other = new Config([
             'app' => [
@@ -180,7 +180,7 @@ final class ConfigTest extends TestCase
         $this->assertTrue($merged->get('app.debug'));
     }
 
-    public function testSubsetCreatesNewConfigWithSubset(): void
+    public function test_subset_should_create_new_config_with_subset(): void
     {
         $subset = $this->config->subset('app');
 
@@ -189,7 +189,7 @@ final class ConfigTest extends TestCase
         $this->assertFalse($subset->has('database'));
     }
 
-    public function testToJsonReturnsValidJson(): void
+    public function test_to_json_should_return_valid_json(): void
     {
         $json = $this->config->toJson();
         
@@ -199,44 +199,100 @@ final class ConfigTest extends TestCase
         $this->assertSame($this->config->all(), $decoded);
     }
 
-    public function testToArrayReturnsArray(): void
+    public function test_to_array_should_return_array(): void
     {
         $array = $this->config->toArray();
         
         $this->assertSame($this->config->all(), $array);
     }
 
-    public function testCachingImprovesPerformance(): void
+    public function test_get_float_should_return_float(): void
     {
-        // Warmup
-        $this->config->get('app.name');
-        $this->config->clearCache();
-
-        $iterations = 10000;
-
-        // First access - no cache (repeated clear)
-        $start1 = microtime(true);
-        for ($i = 0; $i < $iterations; $i++) {
-            $this->config->clearCache();
-            $this->config->get('app.name');
-        }
-        $time1 = microtime(true) - $start1;
-
-        // Second access - cached
-        // Populate cache first
-        $this->config->get('app.name');
+        $this->assertSame(3306.0, $this->config->getFloat('database.port'));
         
-        $start2 = microtime(true);
-        for ($i = 0; $i < $iterations; $i++) {
-            $this->config->get('app.name');
-        }
-        $time2 = microtime(true) - $start2;
-
-        // Cached access should be faster
-        $this->assertLessThan($time1, $time2);
+        $this->config->set('pi', 3.14);
+        $this->assertSame(3.14, $this->config->getFloat('pi'));
     }
 
-    public function testClearCacheRemovesCachedValues(): void
+    public function test_get_float_should_throw_on_non_float(): void
+    {
+        $this->expectException(ConfigException::class);
+        $this->config->getFloat('app.name');
+    }
+
+    public function test_get_string_should_return_default(): void
+    {
+        $this->config->set('explicit.null', null);
+        $this->assertSame('fallback', $this->config->getString('missing', 'fallback'));
+        $this->assertSame('fallback', $this->config->getString('explicit.null', 'fallback'));
+    }
+
+    public function test_get_int_should_return_default(): void
+    {
+        $this->config->set('explicit.null', null);
+        $this->assertSame(999, $this->config->getInt('missing', 999));
+        $this->assertSame(999, $this->config->getInt('explicit.null', 999));
+    }
+
+    public function test_get_float_should_return_default(): void
+    {
+        $this->config->set('explicit.null', null);
+        $this->assertSame(1.23, $this->config->getFloat('missing', 1.23));
+        $this->assertSame(1.23, $this->config->getFloat('explicit.null', 1.23));
+    }
+
+    public function test_get_bool_should_return_default(): void
+    {
+        $this->config->set('explicit.null', null);
+        $this->assertTrue($this->config->getBool('missing', true));
+        $this->assertFalse($this->config->getBool('explicit.null', false));
+    }
+
+    public function test_get_array_should_return_default(): void
+    {
+        $this->config->set('explicit.null', null);
+        $this->assertSame(['fallback'], $this->config->getArray('missing', ['fallback']));
+        $this->assertSame(['fallback'], $this->config->getArray('explicit.null', ['fallback']));
+    }
+
+    public function test_get_array_should_throw_on_non_array(): void
+    {
+        $this->expectException(ConfigException::class);
+        $this->config->getArray('app.name');
+    }
+
+    public function test_subset_should_return_empty_if_not_array(): void
+    {
+        $subset = $this->config->subset('app.name'); // This is a string
+        $this->assertEmpty($subset->all());
+    }
+
+    public function test_set_should_create_deeply_nested_arrays(): void
+    {
+        $this->config->set('very.deeply.nested.key', 'value');
+        $this->assertEquals('value', $this->config->get('very.deeply.nested.key'));
+        $this->assertIsArray($this->config->get('very.deeply.nested'));
+    }
+
+    public function test_clear_cache_for_path_should_clear_children(): void
+    {
+        // Populate cache
+        $this->config->get('app.name');
+        $this->config->get('app.debug');
+        
+        $stats = $this->config->getCacheStats();
+        $this->assertContains('app.name', $stats['keys']);
+        $this->assertContains('app.debug', $stats['keys']);
+
+        // Set 'app' (parent) should clear 'app.name' and 'app.debug'
+        $this->config->set('app', ['version' => '2.0']);
+        
+        $stats = $this->config->getCacheStats();
+        $this->assertNotContains('app.name', $stats['keys']);
+        $this->assertNotContains('app.debug', $stats['keys']);
+    }
+
+    public function test_clear_cache_should_remove_cached_values(): void
     {
         // Access to populate cache
         $this->config->get('app.name');

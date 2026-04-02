@@ -26,7 +26,10 @@
   "autoload": {
     "psr-4": {
       "MonkeysLegion\\Mlc\\": "src/"
-    }
+    },
+    "files": [
+      "src/Support/helpers.php"
+    ]
   },
   "autoload-dev": {
     "psr-4": {
@@ -35,10 +38,10 @@
   },
   "scripts": {
     "test": "phpunit",
-    "analyse": "phpstan analyse src --level=8",
+    "analyse": "phpstan analyse src --level=9",
     "cs-fix": "php-cs-fixer fix src",
     "ci": [
-      "@stan",
+      "@analyse",
       "@test"
     ]
   },

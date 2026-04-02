@@ -170,7 +170,8 @@ final class Parser
             }
 
             // key value (whitespace separator)
-            if (preg_match('/^([A-Za-z0-9_]+)\s+(.+)$/', $line, $m)) {
+            // Ensure the value part doesn't start with '=' to avoid confusion with the equals syntax
+            if (preg_match('/^([A-Za-z0-9_]+)\s+(?!=)(.+)$/', $line, $m)) {
                 [$_, $key, $rawVal] = $m;
                 $this->processKeyValue($stack, $key, $rawVal, $inArray, $arrayKey, $arrayRaw, $arrayStartLine);
                 continue;
@@ -281,6 +282,28 @@ final class Parser
             );
         }
 
+        // 1. Environment Variable Expansion
+        // Case: Standalone ${VAR} or ${VAR:-default} - preserves types from env() helper
+        if (preg_match('/^\$\{(?P<var>[a-zA-Z_0-9]+)(?::-(?P<default>.*))?\}$/', $raw, $m)) {
+            return env($m['var'], $m['default'] ?? null);
+        }
+
+        // Case: Mixed expansion in a larger string
+        $raw = (string) preg_replace_callback(
+            '/\$\{(?P<var>[a-zA-Z_0-9]+)(?::-(?P<default>.*))?\}/',
+            function (array $m): string {
+                $val = env($m['var'], $m['default'] ?? null);
+                
+                return match (true) {
+                    $val === true => 'true',
+                    $val === false => 'false',
+                    $val === null => 'null',
+                    default => (string) $val,
+                };
+            },
+            $raw
+        );
+
         // Null value
         if (strcasecmp($raw, 'null') === 0) {
             return null;
@@ -298,17 +321,7 @@ final class Parser
         // JSON-style array
         if (str_starts_with($raw, '[') && str_ends_with($raw, ']')) {
             try {
-                $decoded = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
-                
-                if (!is_array($decoded)) {
-                    throw new ParserException(
-                        "JSON array decode resulted in non-array type",
-                        $this->currentLine,
-                        $this->currentFile
-                    );
-                }
-                
-                return $decoded;
+                return json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
             } catch (JsonException $e) {
                 throw new ParserException(
                     "Invalid JSON array: {$e->getMessage()}",
