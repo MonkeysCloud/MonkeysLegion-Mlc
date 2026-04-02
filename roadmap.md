@@ -19,7 +19,7 @@ This roadmap outlines the evolution of the MonkeysLegion MLC configuration libra
 - **Task**: Implement `${VAR}` and `${VAR:-default}` syntax parsing in `Parser.php`.
 - **Technical Detail**: 
     - Update `parseValue()` to detect `${}` patterns.
-    - Use `getenv()` or standard `$_ENV` lookup.
+    - Use `env()` helper function for lookup.
     - Support fallback values using the `:-` separator.
 - **Priority**: High (Critical)
 
@@ -27,7 +27,7 @@ This roadmap outlines the evolution of the MonkeysLegion MLC configuration libra
 - **Task**: Replace depth-limiting with a reference-tracking algorithm.
 - **Technical Detail**: 
     - Maintain a stack of "currently resolving keys" during parsing.
-    - If a key references another key (planned feature 3.1) that is already in the stack, throw a `CircularReferenceException`.
+    - If a key references another key (planned feature 3.0) that is already in the stack, throw a `CircularReferenceException`.
 - **Priority**: Medium
 
 ### 1.3 Strict Permission Auditing

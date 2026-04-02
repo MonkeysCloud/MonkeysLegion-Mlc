@@ -4,9 +4,14 @@ declare(strict_types=1);
 
 namespace MonkeysLegion\Mlc;
 
-use JsonException;
 use MonkeysLegion\Mlc\Exception\ParserException;
 use MonkeysLegion\Mlc\Exception\SecurityException;
+use MonkeysLegion\Mlc\Exception\CircularDependencyException;
+
+use JsonException;
+
+use is_string;
+use is_array;
 
 /**
  * Production-grade MLC Parser
@@ -202,6 +207,8 @@ final class Parser
             );
         }
 
+        $this->resolveReferences($data, $data);
+
         return $data;
     }
 
@@ -282,27 +289,6 @@ final class Parser
             );
         }
 
-        // 1. Environment Variable Expansion
-        // Case: Standalone ${VAR} or ${VAR:-default} - preserves types from env() helper
-        if (preg_match('/^\$\{(?P<var>[a-zA-Z_0-9]+)(?::-(?P<default>.*))?\}$/', $raw, $m)) {
-            return env($m['var'], $m['default'] ?? null);
-        }
-
-        // Case: Mixed expansion in a larger string
-        $raw = (string) preg_replace_callback(
-            '/\$\{(?P<var>[a-zA-Z_0-9]+)(?::-(?P<default>.*))?\}/',
-            function (array $m): string {
-                $val = env($m['var'], $m['default'] ?? null);
-                
-                return match (true) {
-                    $val === true => 'true',
-                    $val === false => 'false',
-                    $val === null => 'null',
-                    default => (string) $val,
-                };
-            },
-            $raw
-        );
 
         // Null value
         if (strcasecmp($raw, 'null') === 0) {
@@ -457,5 +443,99 @@ final class Parser
                 E_USER_NOTICE
             );
         }
+    }
+
+    private function resolveReferences(array &$data, array &$rootData): void
+    {
+        foreach ($data as $key => &$value) {
+            if (is_array($value)) {
+                $this->resolveReferences($value, $rootData);
+            } elseif (is_string($value)) {
+                $this->resolveNode($value, $rootData, []);
+            }
+        }
+    }
+
+    private function resolveNode(mixed &$node, array &$rootData, array $resolvingPath): void
+    {
+        if (!is_string($node)) {
+            return;
+        }
+
+        // 1. Standalone expansion (can change type)
+        if (preg_match('/^\$\{(?P<var>[a-zA-Z_0-9\.]+)(?::-(?P<default>.*))?\}$/', $node, $m)) {
+            $var = $m['var'];
+            $default = $m['default'] ?? null;
+            
+            $resolvedValue = $this->resolveVariable($var, $rootData, $resolvingPath);
+            if ($resolvedValue === null) {
+                $resolvedValue = $default;
+            }
+            
+            if (is_string($resolvedValue)) {
+                if ($resolvedValue === '') {
+                    $node = '';
+                } else {
+                    $node = $this->parseValue($resolvedValue);
+                }
+            } else {
+                $node = $resolvedValue;
+            }
+            return;
+        }
+
+        // 2. Mixed expansion (always string result)
+        if (str_contains($node, '${')) {
+            $node = (string) preg_replace_callback(
+                '/\$\{(?P<var>[a-zA-Z_0-9\.]+)(?::-(?P<default>.*))?\}/',
+                function (array $m) use (&$rootData, $resolvingPath) {
+                    $var = $m['var'];
+                    $default = $m['default'] ?? null;
+                    
+                    $val = $this->resolveVariable($var, $rootData, $resolvingPath);
+                    if ($val === null) {
+                        $val = $default;
+                    }
+                    
+                    return match (true) {
+                        $val === true => 'true',
+                        $val === false => 'false',
+                        $val === null => 'null',
+                        default => (string) $val,
+                    };
+                },
+                $node
+            );
+        }
+    }
+
+    private function resolveVariable(string $path, array &$rootData, array $resolvingPath): mixed
+    {
+        if (in_array($path, $resolvingPath, true)) {
+            throw new CircularDependencyException("Circular dependency detected involving '{$path}'");
+        }
+
+        $resolvingPath[] = $path;
+
+        // Try getting from config data
+        $node = &$rootData;
+        $keys = explode('.', $path);
+        $found = true;
+        foreach ($keys as $k) {
+            if (!is_array($node) || !array_key_exists($k, $node)) {
+                $found = false;
+                break;
+            }
+            $node = &$node[$k];
+        }
+
+        if ($found) {
+            if (is_string($node)) {
+                $this->resolveNode($node, $rootData, $resolvingPath);
+            }
+            return $node;
+        }
+
+        return env($path);
     }
 }
