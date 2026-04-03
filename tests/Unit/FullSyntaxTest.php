@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace MonkeysLegion\Mlc\Tests\Unit;
 
+use MonkeysLegion\Env\Repositories\NativeEnvRepository;
 use PHPUnit\Framework\TestCase;
 use MonkeysLegion\Mlc\Parser;
 use MonkeysLegion\Mlc\Config;
@@ -14,7 +15,7 @@ class FullSyntaxTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->parser = new Parser();
+        $this->parser = new Parser(new NativeEnvRepository());
     }
 
     private function getComprehensiveContent(): string

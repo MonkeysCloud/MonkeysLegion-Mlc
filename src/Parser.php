@@ -9,7 +9,7 @@ use MonkeysLegion\Mlc\Exception\SecurityException;
 use MonkeysLegion\Mlc\Exception\CircularDependencyException;
 
 use JsonException;
-
+use MonkeysLegion\Env\Contracts\EnvRepositoryInterface;
 use MonkeysLegion\Mlc\Contracts\ParserInterface;
 
 /**
@@ -52,6 +52,12 @@ final class Parser implements ParserInterface
      * @var string[]
      */
     private array $allParsedFiles = [];
+
+    // ── Constructor ──────────────────────────────────────────────
+
+    public function __construct(
+        private EnvRepositoryInterface $env,
+    ) {}
 
     // ── Public API ──────────────────────────────────────────────
 
@@ -193,14 +199,15 @@ final class Parser implements ParserInterface
             // Recursive include: @include "other.mlc", @include <other.mlc>, @include other.mlc
             if (preg_match('/^@include\s+(?P<f>".+?"|\'.+?\'|<.+?>|[^\s"\'<>{}]+)$/', $line, $m)) {
                 $rawFile = $m['f'];
-                
+
                 // Remove wrappers if present (" ", ' ', < >)
                 $first = $rawFile[0] ?? '';
                 $last = substr($rawFile, -1);
-                
-                if (($first === '"' && $last === '"') || 
-                    ($first === "'" && $last === "'") || 
-                    ($first === '<' && $last === '>')) {
+
+                if (($first === '"' && $last === '"') ||
+                    ($first === "'" && $last === "'") ||
+                    ($first === '<' && $last === '>')
+                ) {
                     $includeFile = substr($rawFile, 1, -1);
                 } else {
                     $includeFile = $rawFile;
@@ -227,7 +234,7 @@ final class Parser implements ParserInterface
             // Section start   e.g.:  database {
             if (preg_match('/^([A-Za-z0-9_]+)\s*\{$/', $line, $m)) {
                 $section = $m[1];
-                
+
                 // Check depth limit
                 $depth++;
                 if ($depth > self::MAX_DEPTH) {
@@ -239,7 +246,7 @@ final class Parser implements ParserInterface
                 }
 
                 $current = &$stack[count($stack) - 1];
-                
+
                 // Prevent overwriting existing non-array values
                 if (isset($current[$section]) && !is_array($current[$section])) {
                     throw new ParserException(
@@ -248,11 +255,11 @@ final class Parser implements ParserInterface
                         $this->currentFile
                     );
                 }
-                
+
                 if (!isset($current[$section])) {
                     $current[$section] = [];
                 }
-                
+
                 $stack[] = &$current[$section];
                 continue;
             }
@@ -353,7 +360,7 @@ final class Parser implements ParserInterface
         int &$arrayStartLine
     ): void {
         $trimmed = trim($rawVal);
-        
+
         // Begin multi-line array?
         if (str_starts_with($trimmed, '[') && !str_ends_with($trimmed, ']')) {
             $inArray = true;
@@ -375,16 +382,16 @@ final class Parser implements ParserInterface
         }
 
         $current = &$stack[count($stack) - 1];
-        
+
         // Warn about duplicate keys (overwrite with warning)
         if (array_key_exists($key, $current)) {
             trigger_error(
                 "Duplicate key '{$key}' at line {$this->currentLine} in {$this->currentFile}, " .
-                "previous value will be overwritten",
+                    "previous value will be overwritten",
                 E_USER_WARNING
             );
         }
-        
+
         $current[$key] = $value;
     }
 
@@ -452,7 +459,8 @@ final class Parser implements ParserInterface
 
         // String value - remove quotes if present
         if ((str_starts_with($raw, '"') && str_ends_with($raw, '"')) ||
-            (str_starts_with($raw, "'") && str_ends_with($raw, "'"))) {
+            (str_starts_with($raw, "'") && str_ends_with($raw, "'"))
+        ) {
             return substr($raw, 1, -1);
         }
 
@@ -490,7 +498,7 @@ final class Parser implements ParserInterface
     {
         // Check for path traversal attempts
         $realPath = realpath($file);
-        
+
         if ($realPath === false) {
             throw new SecurityException(
                 "Config file not found or inaccessible: {$file}"
@@ -548,7 +556,7 @@ final class Parser implements ParserInterface
                 if ($this->strictSecurity) {
                     throw new SecurityException($message);
                 }
-                
+
                 trigger_error($message, E_USER_WARNING);
             }
         }
@@ -564,7 +572,7 @@ final class Parser implements ParserInterface
     private function validateFileSize(string $file): void
     {
         $size = @filesize($file);
-        
+
         if ($size === false) {
             throw new SecurityException(
                 "Could not determine size of config file: {$file}"
@@ -621,12 +629,12 @@ final class Parser implements ParserInterface
         if (preg_match('/^\$\{(?P<var>[a-zA-Z_0-9\.]+)(?::-(?P<default>.*))?\}$/', $node, $m)) {
             $var = $m['var'];
             $default = $m['default'] ?? null;
-            
+
             $resolvedValue = $this->resolveVariable($var, $rootData, $resolvingPath);
             if ($resolvedValue === null) {
                 $resolvedValue = $default;
             }
-            
+
             if (is_string($resolvedValue)) {
                 if ($resolvedValue === '') {
                     $node = '';
@@ -646,12 +654,12 @@ final class Parser implements ParserInterface
                 function (array $m) use (&$rootData, $resolvingPath) {
                     $var = $m['var'];
                     $default = $m['default'] ?? null;
-                    
+
                     $val = $this->resolveVariable($var, $rootData, $resolvingPath);
                     if ($val === null) {
                         $val = $default;
                     }
-                    
+
                     return match (true) {
                         $val === true => 'true',
                         $val === false => 'false',
@@ -697,6 +705,7 @@ final class Parser implements ParserInterface
             return $node;
         }
 
-        return env($path);
+        $value = $this->env->get($path, null);
+        return ($value === '' || $value === null) ? null : $value;
     }
 }

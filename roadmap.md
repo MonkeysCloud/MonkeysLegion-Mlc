@@ -103,7 +103,7 @@ This roadmap outlines the evolution of the MonkeysLegion MLC configuration libra
 - **Priority**: Medium
 
 ### 3.2 Decouple `phpdotenv`
-- [ ] **Task**: Abstract environment loading.
+- [x] **Task**: Abstract environment loading.
 - **Technical Detail**:
     - Move `Dotenv` interaction to a separate `EnvBridge`.
     - Allow MLC to function without `vlucas/phpdotenv` if the environment is already populated.

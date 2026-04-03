@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace MonkeysLegion\Mlc\Tests\Unit;
 
+use MonkeysLegion\Env\Repositories\NativeEnvRepository;
 use PHPUnit\Framework\TestCase;
 use MonkeysLegion\Mlc\Loader;
 use MonkeysLegion\Mlc\Parser;
@@ -17,23 +18,22 @@ class LoaderTest extends TestCase
     private string $baseDir;
     private Parser $parser;
     private Loader $loader;
+    private NativeEnvRepository $env;
 
     protected function setUp(): void
     {
         $this->baseDir = sys_get_temp_dir() . '/mlc_loader_test_' . uniqid();
         mkdir($this->baseDir, 0777, true);
         
-        $this->parser = new Parser();
+        $this->env = new NativeEnvRepository();
+        $this->parser = new Parser($this->env);
         $this->loader = new Loader($this->parser, $this->baseDir, autoLoadEnv: false);
     }
 
     protected function tearDown(): void
     {
         $this->removeDirectory($this->baseDir);
-        
-        // Clean environment
-        putenv('APP_ENV');
-        unset($_ENV['APP_ENV'], $_SERVER['APP_ENV']);
+        $this->env->unset('APP_ENV');
     }
 
     private function removeDirectory(string $dir): void
@@ -171,7 +171,7 @@ class LoaderTest extends TestCase
         $loader = new Loader($this->parser, $this->baseDir, autoLoadEnv: true);
         
         // This should have loaded .env and .env.local
-        $this->assertEquals('dev', env('APP_ENV'));
+        $this->assertEquals('dev', $this->env->get('APP_ENV'));
     }
 
     public function test_resolve_app_env_from_server_should_work(): void

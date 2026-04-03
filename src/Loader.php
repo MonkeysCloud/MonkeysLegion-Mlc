@@ -23,7 +23,8 @@ use MonkeysLegion\Mlc\Contracts\CacheInterface;
  * - Hot-reload detection in development
  *
  * Usage:
- *   $loader = new Loader(new Parser(), '/path/to/config');
+ *   // Load environment repository offered by MonkeysLegion-Env
+ *   $loader = new Loader(new Parser(new NativeEnvRepository()), '/path/to/config');
  *   $config = $loader->load(['app', 'cors']);
  */
 final class Loader implements LoaderInterface

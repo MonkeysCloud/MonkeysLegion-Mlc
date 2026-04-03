@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace MonkeysLegion\Mlc\Tests\Unit;
 
+use MonkeysLegion\Env\Repositories\NativeEnvRepository;
 use PHPUnit\Framework\TestCase;
 use MonkeysLegion\Mlc\Parser;
 use MonkeysLegion\Mlc\Exception\ParserException;
@@ -12,11 +13,13 @@ use MonkeysLegion\Mlc\Exception\SecurityException;
 class ParserTest extends TestCase
 {
     private Parser $parser;
+    private NativeEnvRepository $env;
     private string $tempFile;
 
     protected function setUp(): void
     {
-        $this->parser = new Parser();
+        $this->env = new NativeEnvRepository();
+        $this->parser = new Parser($this->env);
         $this->tempFile = tempnam(sys_get_temp_dir(), 'mlc_test_') . '.mlc';
     }
 
@@ -287,9 +290,9 @@ class ParserTest extends TestCase
 
     public function test_inline_env_expansion_with_types_should_convert_to_strings(): void
     {
-        putenv('ENV_TRUE=true');
-        putenv('ENV_FALSE=false');
-        putenv('ENV_NULL=null');
+        $this->env->set('ENV_TRUE', 'true');
+        $this->env->set('ENV_FALSE', 'false');
+        $this->env->set('ENV_NULL', 'null');
         
         $content = <<<MLC
         a = "is \${ENV_TRUE}"
