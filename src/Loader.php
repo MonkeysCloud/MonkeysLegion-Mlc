@@ -8,6 +8,7 @@ use Dotenv\Dotenv;
 use Dotenv\Exception\InvalidPathException;
 use MonkeysLegion\Mlc\Exception\LoaderException;
 use MonkeysLegion\Mlc\Contracts\ConfigValidatorInterface;
+use MonkeysLegion\Mlc\Cache\CompiledPhpCache;
 use Psr\SimpleCache\CacheInterface;
 
 /**
@@ -52,7 +53,6 @@ final class Loader
      */
     private bool $envLoaded = false;
     private ?ConfigValidatorInterface $validator = null;
-    private bool $autoFreeze = true;
 
     /**
      * Loader constructor.
@@ -114,21 +114,25 @@ final class Loader
         // Generate cache key
         $cacheKey = $this->generateCacheKey($names);
 
-        // Try cache first
-        if ($useCache && $this->cache !== null) {
+        // ── Fast-path: CompiledPhpCache ─────────────────────────────────────
+        // Compiled cache stores raw arrays — no metadata envelope needed.
+        // OPcache will serve this from shared memory on warm hits.
+        if ($useCache && $this->cache instanceof CompiledPhpCache) {
+            $compiled = $this->cache->get($cacheKey);
+            if (is_array($compiled)) {
+                return new Config($compiled);
+            }
+        }
+
+        // ── Standard PSR-16 cache (envelope with mtime validation) ──────────
+        if ($useCache && $this->cache !== null && !($this->cache instanceof CompiledPhpCache)) {
             try {
                 $cached = $this->cache->get($cacheKey);
                 
                 if ($cached !== null && $this->isCacheValid($names, $cached)) {
-                    $config = new Config($cached['data']);
-                    
-                    if ($this->autoFreeze) {
-                        $config->freeze();
-                    }
-                    
-                    return $config;
+                    return new Config($cached['data']);
                 }
-            } catch (\Throwable $e) {
+            } catch (\Throwable) {
                 // Cache read failed, continue to load from files
             }
         }
@@ -166,24 +170,24 @@ final class Loader
         // Cache the result
         if ($useCache && $this->cache !== null) {
             try {
-                $this->cache->set($cacheKey, [
-                    'data' => $merged,
-                    'files' => $files,
-                    'mtimes' => $this->getFileMtimes($files),
-                    'timestamp' => time(),
-                ]);
-            } catch (\Throwable $e) {
+                if ($this->cache instanceof CompiledPhpCache) {
+                    // Compiled cache: store the raw array directly — no envelope.
+                    $this->cache->set($cacheKey, $merged);
+                } else {
+                    // Standard PSR-16: store with mtime metadata for invalidation.
+                    $this->cache->set($cacheKey, [
+                        'data'      => $merged,
+                        'files'     => $files,
+                        'mtimes'    => $this->getFileMtimes($files),
+                        'timestamp' => time(),
+                    ]);
+                }
+            } catch (\Throwable) {
                 // Cache write failed, but continue
             }
         }
 
-        $config = new Config($merged);
-        
-        if ($this->autoFreeze) {
-            $config->freeze();
-        }
-        
-        return $config;
+        return new Config($merged);
     }
 
     /**
@@ -241,25 +245,6 @@ final class Loader
     {
         $this->validator = $validator;
         return $this;
-    }
-
-    /**
-     * Enable/disable auto-freeze.
-     *
-     * When enabled, all loaded configs are frozen automatically.
-     */
-    public function setAutoFreeze(bool $enabled): self
-    {
-        $this->autoFreeze = $enabled;
-        return $this;
-    }
-
-    /**
-     * Check if auto-freeze is enabled.
-     */
-    public function isAutoFreezeEnabled(): bool
-    {
-        return $this->autoFreeze;
     }
 
     /**

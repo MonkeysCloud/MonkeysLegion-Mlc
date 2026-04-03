@@ -10,9 +10,6 @@ use MonkeysLegion\Mlc\Exception\CircularDependencyException;
 
 use JsonException;
 
-use is_string;
-use is_array;
-
 /**
  * Production-grade MLC Parser
  *

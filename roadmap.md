@@ -12,12 +12,12 @@ This roadmap outlines the evolution of the MonkeysLegion MLC configuration libra
 
 ---
 
-## 🛠️ Phase 1: Security & Core Hardening
+## 🛠️ Phase 1: Security & Core Hardening ✅
 *Focus: Addressing critical gaps identified in the v2.x security audit.*
 
-### 1.1 Robust Environment Variable expansion
+### 1.1 Robust Environment Variable Expansion
 - [x] **Task**: Implement `${VAR}` and `${VAR:-default}` syntax parsing in `Parser.php`.
-- **Technical Detail**: 
+- **Technical Detail**:
     - Update `parseValue()` to detect `${}` patterns.
     - Use `env()` helper function for lookup.
     - Support fallback values using the `:-` separator.
@@ -25,35 +25,66 @@ This roadmap outlines the evolution of the MonkeysLegion MLC configuration libra
 
 ### 1.2 "True" Circular Reference Detection
 - [x] **Task**: Replace depth-limiting with a reference-tracking algorithm.
-- **Technical Detail**: 
+- **Technical Detail**:
     - Maintain a stack of "currently resolving keys" during parsing.
-    - If a key references another key (planned feature 3.0) that is already in the stack, throw a `CircularReferenceException`.
+    - If a key references another key already in the stack, throw a `CircularDependencyException`.
 - **Priority**: Medium
 
 ### 1.3 Strict Permission Auditing
 - [x] **Task**: Upgrade `validateFileAccess` warnings to exceptions for production.
-- **Technical Detail**: 
+- **Technical Detail**:
     - Add a `strict_security` flag to `Parser` and `Loader`.
     - Throw `SecurityException` if a file is world-writable and `strict_security` is true.
 - **Priority**: Medium
 
 ---
 
-## 🚀 Phase 2: Extreme Performance (v3 Core)
+## 🚀 Phase 2: Extreme Performance (v3 Core) ✅
 *Focus: Moving beyond serialized caching to bytecode-optimized execution.*
 
 ### 2.1 Configuration Pre-compilation
-- **Task**: Create a "Compiler" that exports MLC structure to a static PHP file.
-- **Technical Detail**: 
-    - Implement `Mlc\Compiler\PhpCompiler`.
-    - Export parsed arrays using `var_export($data, true)`.
-    - Generate a file: `<?php return [...];`.
-    - Loader should prioritize loading `.php` compiled files if present.
+- [x] **Task**: Create a "Compiler" that exports MLC structure to a static PHP file.
+- **Technical Detail**:
+    - `Mlc\Cache\CompiledPhpCache` implements PSR-16 with OPcache as the backend.
+    - Exports parsed arrays using `var_export($data, true)`.
+    - Generated file format: `<?php return [...];` with a debug timestamp header.
+    - `Loader` detects `CompiledPhpCache` and uses a fast raw-array path (no metadata envelope).
+    - `Loader::compile(array $names)` triggers a fresh parse + write to compiled cache.
+    - OPcache invalidation is called before each write to prevent stale bytecode reads.
+    - TTL is deliberately ignored — compiled cache is immutable until explicitly evicted.
 - **Priority**: High
 
-### 2.2 Recursive Includes
-- **Task**: Support `include "other.mlc"` syntax.
-- **Technical Detail**: 
+### 2.2 Layered Runtime Mutability (Dual-Layer Engine)
+*Absorbed from original Phase 6 — an integral part of the OPcache strategy.*
+
+#### 2.2.1 Dual-Layer Data Engine
+- [x] **Task**: Implement a non-destructive runtime-override layer on top of the compiled base.
+- **Technical Detail**:
+    - `Config` holds a separate `$runtimeOverrides` array (dot-notation key → value).
+    - `get()` checks the override layer before the primary compiled data layer.
+    - `override(string $path, mixed $value)` writes to the override layer without touching the compiled array.
+    - The OPcache-backed base is never mutated — zero impact on shared memory.
+- **Priority**: High
+
+#### 2.2.2 Atomic Snapshotting
+- [x] **Task**: Provide a way to "flatten" runtime changes into a new isolated `Config` instance.
+- **Technical Detail**:
+    - `Config->snapshot()` merges the current compiled data with runtime overrides into a fresh instance.
+    - Essential for long-running processes (RoadRunner, Swoole) requiring per-request state isolation.
+    - The original `Config` instance (and its OPcache base) is unaffected.
+- **Priority**: Medium
+
+#### 2.2.3 Mutability Locks
+- [x] **Task**: Fine-grained control over what layers can be mutated.
+- **Technical Detail**:
+    - `Config->lockBase()`: Seals the compiled base layer; runtime `override()` calls are still allowed.
+    - `Config->lockAll()`: Fully immutable — throws `FrozenConfigException` on any further mutation.
+    - `freeze()` (existing) seals `set()` access to the base but leaves the override layer open.
+- **Priority**: Medium
+
+### 2.3 Recursive Includes
+- [ ] **Task**: Support `include "other.mlc"` syntax.
+- **Technical Detail**:
     - Update the parser regex to detect `include` statements.
     - Recursively call `parseFile()` and merge results.
     - Must include logic to prevent inclusion loops.
@@ -65,15 +96,15 @@ This roadmap outlines the evolution of the MonkeysLegion MLC configuration libra
 *Focus: Decoupling and extensibility.*
 
 ### 3.1 Component Interfacing
-- **Task**: Define `ParserInterface`, `LoaderInterface`, and `CacheInterface`.
-- **Technical Detail**: 
+- [ ] **Task**: Define `ParserInterface`, `LoaderInterface`, and `CacheInterface`.
+- **Technical Detail**:
     - Extract methods from current concrete classes.
     - Allow dependency injection of custom parsers (e.g., for JSON/YAML).
 - **Priority**: Medium
 
 ### 3.2 Decouple `phpdotenv`
-- **Task**: Abstract environment loading.
-- **Technical Detail**: 
+- [ ] **Task**: Abstract environment loading.
+- **Technical Detail**:
     - Move `Dotenv` interaction to a separate `EnvBridge`.
     - Allow MLC to function without `vlucas/phpdotenv` if the environment is already populated.
 - **Priority**: Medium
@@ -84,15 +115,15 @@ This roadmap outlines the evolution of the MonkeysLegion MLC configuration libra
 *Focus: Making MLC a joy to work with.*
 
 ### 4.1 CLI Validation Tool (`mlc-check`)
-- **Task**: Build a standalone binary for CI/CD pipelines.
-- **Technical Detail**: 
+- [ ] **Task**: Build a standalone binary for CI/CD pipelines.
+- **Technical Detail**:
     - Use `symfony/console` or a lightweight alternative.
     - Support `--schema` validation using `MonkeysLegion\Validator`.
 - **Priority**: Low
 
 ### 4.2 Multi-Format Support
-- **Task**: Build bridges for JSON, YAML, and PHP arrays.
-- **Technical Detail**: 
+- [ ] **Task**: Build bridges for JSON, YAML, and PHP arrays.
+- **Technical Detail**:
     - Enable `Loader->load(['config.mlc', 'legacy.json'])`.
     - Standardize all formats into the same dot-notation access.
 - **Priority**: Low
@@ -103,41 +134,14 @@ This roadmap outlines the evolution of the MonkeysLegion MLC configuration libra
 *Focus: Enterprise-grade connectivity.*
 
 ### 5.1 Secrets Management Drivers
-- **Task**: Drivers for HashiCorp Vault, AWS, and GCP.
-- **Technical Detail**: 
+- [ ] **Task**: Drivers for HashiCorp Vault, AWS, and GCP.
+- **Technical Detail**:
     - Implement lazy-loading for secrets.
     - Syntax: `db_pass = vault("kv/db_password")`.
 - **Priority**: Low
 
 ### 5.2 Event / Middleware Hook System
-- **Task**: Emitter implementation in `Loader`.
-- **Technical Detail**: 
+- [ ] **Task**: Emitter implementation in `Loader`.
+- **Technical Detail**:
     - Hooks: `onLoading`, `onLoaded`, `onValidationError`.
-- **Priority**: Medium
-
----
-
-## ⚡ Phase 6: Layered Runtime Mutability (Hybrid Engine)
-*Focus: Allowing flexibility without compromising OPcache performance.*
-
-### 6.1 "Dual-Layer" Data Engine
-- **Task**: Implement a non-destructive runtime-override layer.
-- **Technical Detail**: 
-    - Maintain a separate `$runtimeOverrides` array inside `Config`.
-    - Update `get()` to check the override layer before the primary data layer.
-    - This allows modifying values in production without duplicating the large static compiled array.
-- **Priority**: High
-
-### 6.2 Atomic Snapshotting
-- **Task**: Provide a way to "flatten" runtime changes into a new Config instance.
-- **Technical Detail**: 
-    - Method `Config->snapshot()`: Merges the current static data with runtime overrides into a fresh instance.
-    - Useful for long-running processes (e.g. RoadRunner, Swoole) where state isolation is required.
-- **Priority**: Medium
-
-### 6.3 Mutability Toggles
-- **Task**: Fine-grained control over "Switchable" states.
-- **Technical Detail**: 
-    - `Config->lockBase()`: Permanently prevent changes to the pre-compiled layer while allowing runtime overrides.
-    - `Config->lockAll()`: Prevent any further overrides.
 - **Priority**: Medium

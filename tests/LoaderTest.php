@@ -157,17 +157,6 @@ class LoaderTest extends TestCase
         $this->loader->load(['app']);
     }
 
-    public function test_auto_freeze_should_work(): void
-    {
-        file_put_contents($this->baseDir . '/app.mlc', "key val");
-        
-        $config = $this->loader->loadOne('app');
-        $this->assertTrue($config->isFrozen());
-
-        $this->loader->setAutoFreeze(false);
-        $config2 = $this->loader->loadOne('app');
-        $this->assertFalse($config2->isFrozen());
-    }
 
     public function test_load_environment_should_load_correct_priority(): void
     {

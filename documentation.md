@@ -1,21 +1,39 @@
-# MonkeysLegion MLC - Developer Documentation
+# MonkeysLegion MLC — Developer Documentation
 
-Welcome to the official developer documentation for **MonkeysLegion MLC** (MonkeysLegion Config). This package provides a high-performance, production-ready configuration system for PHP applications, specifically designed as the core configuration format for the MonkeysLegion ecosystem.
+**MonkeysLegion MLC** is a high-performance, production-ready configuration engine for PHP 8.4+ applications. It is the official configuration format for the MonkeysLegion ecosystem, designed around a single core principle: **parse once, serve from bytecode forever**.
+
+---
+
+## Table of Contents
+
+1. [Core Philosophy](#-core-philosophy)
+2. [Installation](#-installation)
+3. [The `.mlc` Format](#️-the-mlc-format)
+4. [Loading Configuration](#-loading-configuration)
+5. [Reading Values](#-reading-values)
+6. [OPcache Pre-compilation](#-opcache-pre-compilation-recommended-for-production)
+7. [Standard PSR-16 Caching](#-standard-psr-16-caching)
+8. [Dual-Layer Runtime Overrides](#-dual-layer-runtime-overrides)
+9. [Locking & Immutability](#-locking--immutability)
+10. [Atomic Snapshots](#-atomic-snapshots)
+11. [Schema Validation](#-schema-validation)
+12. [Security Features](#-security-features)
+13. [API Reference](#-api-reference)
 
 ---
 
 ## 🚀 Core Philosophy
 
-MLC is built on three pillars:
-1.  **Performance**: Near-instant loading via PSR-16 caching and optimized parsing.
-2.  **Security**: Hardened against common file-based attacks, misconfigurations, and circular deadlocks.
-3.  **Strictness**: Encourages type-safety and immutability to prevent runtime "magic" and configuration drift.
+MLC is built on four pillars:
+
+1. **Zero-Overhead Production Mode** — Configuration is compiled to static PHP arrays and served directly from OPcache shared memory. No file parsing, no deserialization, no I/O on every request.
+2. **Security First** — Hardened against path traversal, world-writable files, circular references, and oversized inputs.
+3. **Strict Typing** — Typed getters enforce value types at the boundary, catching misconfigurations early.
+4. **Layered Mutability** — An immutable compiled base with an opt-in, non-destructive override layer for runtime use cases like feature flags and multi-tenancy.
 
 ---
 
 ## 📦 Installation
-
-Install via Composer:
 
 ```bash
 composer require monkeyscloud/monkeyslegion-mlc
@@ -25,35 +43,38 @@ composer require monkeyscloud/monkeyslegion-mlc
 
 ## 🛠️ The `.mlc` Format
 
-MLC files use a simple, readable syntax that combines the best of `.env` and nested structure (like JSON or YAML).
+MLC files use a clean, readable syntax inspired by `.env` and structured config formats.
 
-### Basic Key-Value Pairs
-You can use either `=` or whitespace as a separator.
+### Key-Value Pairs
+
+Both `=` and whitespace are valid separators:
+
 ```mlc
-app_name = "My App"
+app_name = "My Application"
 debug    true
 port     8080
 ```
 
 ### Sections (Nesting)
-Sections allow for logical grouping of configuration.
+
 ```mlc
 database {
     host = localhost
     port = 3306
-    
-    auth {
-        user = root
-        pass = secret
+
+    credentials {
+        user = app_user
+        pass = ${DB_PASSWORD}
     }
 }
 ```
 
-### Arrays & Objects
-MLC supports JSON-style arrays and objects, including multi-line support.
+### Arrays & JSON Objects
+
 ```mlc
 allowed_ips = ["127.0.0.1", "10.0.0.1"]
 
+# Multi-line arrays are supported
 features = [
     "caching",
     "validation",
@@ -61,102 +82,431 @@ features = [
 ]
 ```
 
-### Environment Expansion & Fallbacks
-MLC features robust, native environment variable expansion with built-in default fallbacks. It accurately infers data types directly from the loaded environment variables (casting values like `"true"` to boolean `true`).
+### Supported Value Types
+
+| MLC syntax           | PHP type |
+|----------------------|----------|
+| `true` / `false`     | `bool`   |
+| `null`               | `null`   |
+| `3306`               | `int`    |
+| `3.14`               | `float`  |
+| `"hello"` / `'hello'`| `string` |
+| `[1, 2, 3]`          | `array`  |
+| `{"a": 1}`           | `array`  |
+
+### Environment Variable Expansion
+
 ```mlc
-# Simple lookup
+# Simple lookup — throws if missing (unless a default is given)
 db_pass = ${DB_PASSWORD}
 
-# Lookup with default fallback
+# Lookup with fallback default
 db_port = ${DB_PORT:-3306}
 
-# Inline string injection
-api_url = "http://${HOST:-localhost}:${PORT:-8080}/v1"
+# Inline interpolation (result is always a string)
+api_url = "https://${HOST:-localhost}:${PORT:-8080}/v1"
 ```
 
-### Advanced Cross-Key References
-MLC intelligently parses cross-key dependencies within your configuration file. You can reference values dynamically based on other keys. If a variable is not found globally in `$_ENV`, the parser will resolve it against the local configuration map via a dynamic Depth-First Search cycle.
+### Cross-Key References
+
+Keys can reference other keys defined in the same file:
+
 ```mlc
-base_url = "https://example.com"
-api_v1 = "${base_url}/v1"
+base_url = "https://api.example.com"
+health   = "${base_url}/health"
 ```
-> **Note**: To ensure system safety, MLC utilizes a literal **Dependency Graph Tracker**. If you accidentally create a circular reference (`a = ${b}`, `b = ${a}`), the parser halts execution and throws a `CircularDependencyException`.
+
+> **Circular reference protection**: MLC uses a Dependency Graph Tracker. If a circular reference is detected (`a = ${b}`, `b = ${a}`), a `CircularDependencyException` is thrown immediately.
 
 ---
 
-## 📖 Developer Guide
+## 📖 Loading Configuration
 
-### 1. Basic Loading
-The `Loader` is the primary entry point. It requires a `Parser` and a base directory.
+The `Loader` is the primary entry point. It requires a `Parser` instance and a base directory containing `.mlc` files.
 
 ```php
 use MonkeysLegion\Mlc\Loader;
 use MonkeysLegion\Mlc\Parser;
 
 $loader = new Loader(new Parser(), __DIR__ . '/config');
+
+// Load and merge one or more named files (without .mlc extension)
 $config = $loader->load(['app', 'database']);
+
+// Shorthand for a single file
+$config = $loader->loadOne('app');
+
+// Force a fresh parse, bypassing any cache
+$config = $loader->reload(['app', 'database']);
 ```
 
-### 2. Type-Safe Access
-Avoid `mixed` types by using explicit getters. These throw a `ConfigException` if the type doesn't match and seamlessly return the provided `$default` argument when configurations are undefined.
+Multiple files are merged left-to-right with `array_replace_recursive` — later files win on key conflicts.
+
+---
+
+## 📥 Reading Values
+
+### Dot-Notation Access
 
 ```php
-$port   = $config->getInt('database.port', 3306);
-$debug  = $config->getBool('app.debug', false);
-$name   = $config->getString('app.name', 'My App');
-$extras = $config->getArray('extra.features', []);
-$host   = $config->getRequired('database.host'); // Throws if missing
+$config->get('database.host');              // mixed, null if missing
+$config->get('database.port', 3306);       // with default
+$config->has('database.host');             // bool
+$config->getRequired('database.host');     // throws ConfigException if missing
 ```
 
-### 3. Caching (Production Recommendation)
-Integrate with `MonkeysLegion-Cache` (or any PSR-16 cache) to avoid re-parsing files on every request.
+### Typed Getters
+
+All typed getters return `null` (or the provided `$default`) when the path is absent, and throw `ConfigException` when the value exists but is the wrong type.
+
+```php
+$host    = $config->getString('database.host', 'localhost');
+$port    = $config->getInt('database.port', 3306);
+$timeout = $config->getFloat('database.timeout', 5.0);
+$debug   = $config->getBool('app.debug', false);
+$drivers = $config->getArray('database.drivers', []);
+```
+
+### Export
+
+```php
+$config->all();      // array — compiled base data
+$config->toArray();  // alias for all()
+$config->toJson();   // JSON string (pretty-printed, throws JsonException on error)
+$config->subset('database'); // new Config scoped to the 'database' section
+$config->merge($other);      // new Config with $other merged on top
+```
+
+---
+
+## ⚡ OPcache Pre-compilation (Recommended for Production)
+
+`CompiledPhpCache` converts your `.mlc` files into static PHP files (`<?php return [...];`). PHP's OPcache stores the resulting opcode array in **shared memory** — subsequent `load()` calls are a direct memory read with no file I/O, no parsing, and no deserialization.
+
+### Setup
+
+```php
+use MonkeysLegion\Mlc\Cache\CompiledPhpCache;
+use MonkeysLegion\Mlc\Loader;
+use MonkeysLegion\Mlc\Parser;
+
+$cache  = new CompiledPhpCache('/var/cache/mlc');
+$loader = new Loader(new Parser(), __DIR__ . '/config', cache: $cache);
+```
+
+### Compile once — serve forever
+
+```php
+// ── Deployment / warm-up script (run once per deploy) ──────────────────
+$loader->compile(['app', 'database', 'cors']);
+// ^ Parses .mlc files, writes /var/cache/mlc/*.generated.php
+
+// ── Every HTTP request (zero-overhead) ─────────────────────────────────
+$config = $loader->load(['app', 'database', 'cors']);
+// ^ require → OPcache → array. No parsing, no disk I/O.
+```
+
+### Design contract
+
+| Property | Behaviour |
+|---|---|
+| **TTL** | Deliberately ignored. Compiled files never self-expire. |
+| **Eviction** | Explicit only: `compile()`, `delete()`, or `clear()`. |
+| **Re-compile** | Call `compile()` again after a config change (e.g. in your deploy pipeline). |
+| **Atomicity** | Writes use a temp file + `rename()` to prevent half-written reads. |
+| **OPcache safety** | Existing bytecode is invalidated via `opcache_invalidate()` before each write. |
+
+---
+
+## 🗄️ Standard PSR-16 Caching
+
+For environments without OPcache, or where `mtime`-based auto-invalidation is preferred, pass any PSR-16 implementation:
 
 ```php
 use MonkeysLegion\Cache\CacheManager;
 
 $cache = (new CacheManager($cacheConfig))->store('redis');
 $loader = new Loader(new Parser(), __DIR__ . '/config', cache: $cache);
+
+$config = $loader->load(['app']); // auto-invalidates when source files change
 ```
 
-### 4. Schema Validation
-Define a schema to ensure your configuration remains structurally valid as it grows. The validation engine strictly checks enumerations, array bounds, numeric limits, custom Regex matchers, strict-mode overages, and arbitrary callback validation.
+The standard cache stores a metadata envelope `{data, files, mtimes}` and re-parses automatically when a source file's `mtime` changes.
+
+---
+
+## 🔄 Dual-Layer Runtime Overrides
+
+The dual-layer engine lets you apply **non-destructive runtime overrides** on top of the immutable compiled base. The compiled array is never touched.
+
+### How it works
+
+```
+┌──────────────────────────────────────────────────────┐
+│ Layer 2: $runtimeOverrides  (dormant until first use) │
+│ Layer 1: $data              (compiled base, read-only) │
+└──────────────────────────────────────────────────────┘
+
+get() with dormant layer  →  direct lookup in $data (zero overhead)
+get() with active layer   →  $runtimeOverrides[$path] ?? $data traversal
+```
+
+The override layer is **lazy** — it activates automatically on the first `override()` call. Before that, `get()` reads directly from the compiled base with no extra checks.
+
+### Usage
+
+```php
+// Load from OPcache — compiled base, no locks, dual-layer dormant
+$config = $loader->load(['app']);
+
+// Apply runtime overrides — activates dual-layer on first call
+$config->override('app.debug', true);
+$config->override('database.host', 'replica.internal');
+
+// get() checks override layer first
+echo $config->get('app.debug');         // true  (override)
+echo $config->get('app.name');          // "My Application"  (compiled base)
+
+// all() always returns the compiled base — overrides are NOT included
+$base = $config->all();                 // compiled base only
+
+// Inspect active overrides
+$overrides = $config->getOverrides();   // ['app.debug' => true, ...]
+
+// Is the dual-layer currently active?
+$active = $config->isDualLayerActive(); // true after first override()
+```
+
+---
+
+## 🔒 Locking & Immutability
+
+Two explicit locks give you fine-grained control. **No automatic locking** — the Loader returns an unlocked Config; you decide if and when to lock.
+
+### Lock 1 — `lock()` : Sealed, read-only
+
+Prevents **any** `override()` call. Use immediately after `load()` when you want a permanently immutable config.
+
+```php
+$config = $loader->load(['app']);
+$config->lock(); // sealed — no overrides ever
+
+$config->override('x', 1); // ❌ throws FrozenConfigException("config is sealed")
+
+// Reading and snapshots always work
+$config->get('app.name');    // ✅
+$config->snapshot();         // ✅
+```
+
+### Lock 2 — `lockOverrides()` : Override layer sealed
+
+Prevents **further** `override()` calls after a set of overrides has been applied. Already-applied overrides remain visible.
+
+```php
+$config = $loader->load(['app']);
+$config->override('feature.dark_mode', true);
+$config->override('feature.beta',      false);
+$config->lockOverrides(); // no more changes
+
+$config->override('anything', 'x'); // ❌ throws FrozenConfigException("override layer is sealed")
+
+// Existing overrides are still readable
+$config->get('feature.dark_mode'); // ✅ true
+```
+
+### Immutability contract
+
+| Operation | No locks | `lock()` | `lockOverrides()` |
+|---|:---:|:---:|:---:|
+| `get()` / typed getters | ✅ | ✅ | ✅ |
+| `override()` | ✅ | ❌ | ❌ |
+| `snapshot()` | ✅ | ✅ | ✅ |
+| `isDualLayerActive()` | ✅ | ✅ | ✅ |
+
+> Both locks prevent `override()`. The difference is **intent and timing**: `lock()` seals from the start (no overrides ever); `lockOverrides()` seals after you have applied your desired overrides.
+
+### Introspection
+
+```php
+$config->isLocked();           // bool — was lock() called?
+$config->areOverridesLocked(); // bool — was lockOverrides() called?
+$config->isDualLayerActive();  // bool — has override() been called at least once?
+```
+
+---
+
+## 📸 Atomic Snapshots
+
+`snapshot()` **flattens** the compiled base and the current override layer into a fresh, completely independent `Config` instance. The original is unaffected.
+
+The new instance:
+- starts with **no locks** applied
+- starts with the **dual-layer dormant** (overrides are baked into the base)
+- is **fully isolated** — mutations to the original do not bleed through
+
+This is the recommended pattern for **long-running processes** (RoadRunner, Swoole, ReactPHP) that need per-request state isolation:
+
+```php
+// Boot: load once, apply global overrides
+$base = $loader->load(['app']);
+$base->override('app.env', getenv('APP_ENV') ?: 'production');
+$base->lockOverrides(); // sealed — no further global changes
+
+// Per-request worker
+$requestConfig = $base->snapshot();           // isolated copy, unlocked
+$requestConfig->override('tenant.id', $tenantId);
+$requestConfig->override('locale', $request->getLocale());
+// $base is completely unaffected
+```
+
+```php
+// Snapshot with no overrides — efficiently clones the compiled base
+$snap = $config->snapshot();
+$snap->isDualLayerActive(); // false — starts fresh
+```
+
+---
+
+## ✅ Schema Validation
+
+Attach a validator to the Loader to enforce structural constraints before the `Config` object is returned:
 
 ```php
 use MonkeysLegion\Mlc\Validator\SchemaValidator;
 
 $schema = [
     'app' => [
-        'type' => 'array',
+        'type'     => 'array',
         'children' => [
-            'env' => ['type' => 'string', 'enum' => ['dev', 'stage', 'prod']],
-            'port' => ['type' => 'int', 'min' => 1024, 'max' => 65535],
-        ]
-    ]
+            'env'  => ['type' => 'string', 'enum' => ['dev', 'staging', 'production']],
+            'port' => ['type' => 'int',    'min'  => 1024, 'max' => 65535],
+            'name' => ['type' => 'string', 'pattern' => '/^[A-Za-z ]+$/'],
+        ],
+    ],
+    'database' => [
+        'type'     => 'array',
+        'required' => true,
+        'children' => [
+            'host' => ['type' => 'string', 'required' => true],
+            'port' => ['type' => 'int',    'required' => true],
+        ],
+    ],
 ];
-$loader->setValidator(new SchemaValidator($schema));
-```
 
-### 5. Helper Methods
-The library also features a native `env($key, $default = null)` helper function that unifies queries against `$_ENV`, `$_SERVER`, and `getenv()`, automatically injecting typed literals like `true/false/null` from strings.
+$loader->setValidator(new SchemaValidator($schema));
+$config = $loader->load(['app', 'database']); // throws LoaderException on failure
+```
 
 ---
 
 ## 🚨 Security Features
 
-MLC is designed to be "secure by default":
--   **Path Traversal Protection**: Prevents loading files outside the base directory limit scope.
--   **Circular Reference Detection**: Dependency execution traces paths and denies infinite loop deadlocks outright.
--   **File Size Guard**: Rejects files larger than 10MB to prevent memory exhaustion (OOM attacks).
--   **Permission Audit**: Halts/Warns securely if operating configuration files without adequate write protection or visibility.
--   **Immutability**: The `freeze()` method strictly prevents configuration data from being modified after it has loaded into memory.
+MLC is designed to be secure by default:
+
+| Feature | Detail |
+|---|---|
+| **Path traversal protection** | File paths containing `..` are rejected before any read. |
+| **File existence validation** | `realpath()` is used — symlinks are resolved and checked. |
+| **Permission auditing** | World-writable files trigger a `E_USER_WARNING` by default. |
+| **Strict mode** | Pass `strictSecurity: true` to `Loader` to throw `SecurityException` instead of warning. |
+| **File size limit** | Files larger than 10 MB are rejected (`SecurityException`). |
+| **Circular reference detection** | Cross-key and env-var cycles throw `CircularDependencyException`. |
+
+```php
+// Enable strict security mode
+$loader = new Loader(new Parser(), __DIR__ . '/config', strictSecurity: true);
+```
+
+---
+
+## 📚 API Reference
+
+### `Loader`
+
+| Method | Signature | Description |
+|---|---|---|
+| `load` | `(string[] $names, bool $useCache = true): Config` | Load and merge named config files. |
+| `loadOne` | `(string $name, bool $useCache = true): Config` | Load a single config file. |
+| `reload` | `(string[] $names): Config` | Force fresh parse, bypass cache. |
+| `compile` | `(string[] $names): Config` | Compile to OPcache PHP file (requires `CompiledPhpCache`). |
+| `hasChanges` | `(string[] $names): bool` | Detect if source files have changed since last cache write. |
+| `clearCache` | `(): void` | Clear all cache entries. |
+| `setValidator` | `(?ConfigValidatorInterface $v): self` | Attach a schema validator. |
+
+### `Config`
+
+#### Read
+
+| Method | Returns | Description |
+|---|---|---|
+| `get(path, default)` | `mixed` | Dot-notation lookup. Override layer checked first when active. |
+| `has(path)` | `bool` | True if path exists in either layer. |
+| `getRequired(path)` | `mixed` | Throws `ConfigException` if missing. |
+| `getString(path, default)` | `?string` | Typed getter. |
+| `getInt(path, default)` | `?int` | Typed getter. |
+| `getFloat(path, default)` | `?float` | Typed getter. |
+| `getBool(path, default)` | `?bool` | Typed getter. |
+| `getArray(path, default)` | `?array` | Typed getter. |
+
+#### Export
+
+| Method | Returns | Description |
+|---|---|---|
+| `all()` | `array` | Compiled base data (overrides excluded). |
+| `toArray()` | `array` | Alias for `all()`. |
+| `toJson(flags)` | `string` | JSON-encoded compiled base. |
+| `subset(prefix)` | `Config` | New Config scoped to a sub-section. |
+| `merge(Config)` | `Config` | New Config with another merged on top. |
+
+#### Dual-Layer Overrides
+
+| Method | Returns | Description |
+|---|---|---|
+| `override(path, value)` | `void` | Apply a runtime override. Activates dual-layer on first call. |
+| `getOverrides()` | `array` | Map of all current runtime overrides. |
+| `isDualLayerActive()` | `bool` | True after first `override()` call. |
+
+#### Locks
+
+| Method | Returns | Description |
+|---|---|---|
+| `lock()` | `self` | Lock 1: seal config — no overrides allowed. |
+| `lockOverrides()` | `self` | Lock 2: seal override layer — no further overrides. |
+| `isLocked()` | `bool` | True if `lock()` was called. |
+| `areOverridesLocked()` | `bool` | True if `lockOverrides()` was called. |
+
+#### Snapshots
+
+| Method | Returns | Description |
+|---|---|---|
+| `snapshot()` | `Config` | Flatten compiled base + overrides into a new, independent, unlocked Config. |
+
+#### Cache internals
+
+| Method | Returns | Description |
+|---|---|---|
+| `clearCache()` | `void` | Purge internal dot-path lookup cache. |
+| `getCacheStats()` | `array` | `{size: int, keys: string[]}` — for debugging. |
+
+### `CompiledPhpCache`
+
+Implements PSR-16 `CacheInterface`. TTL is accepted by the interface but **silently ignored** — the cache is immutable until explicitly evicted.
+
+| Method | Description |
+|---|---|
+| `get(key, default)` | `require` the compiled PHP file; returns `$default` if file not found. |
+| `set(key, value, ttl)` | Write compiled PHP file (TTL ignored). Atomic write + OPcache invalidation. |
+| `delete(key)` | Delete compiled file and invalidate OPcache entry. |
+| `clear()` | Delete all `*.generated.php` files in the cache directory. |
+| `has(key)` | `is_file()` check — no extra `require`. |
+| `getMultiple / setMultiple / deleteMultiple` | PSR-16 bulk helpers. |
 
 ---
 
 ## 🛠️ Testing & Quality
 
-We maintain a high standard of code quality:
 ```bash
-composer test    # Run PHPUnit suite (100% test passing)
-composer stan    # Run PHPStan (Level 9 Strict Mode)
-composer ci      # Run full CI pipeline
+./vendor/bin/phpunit --testdox   # Run full test suite
+composer stan                    # PHPStan Level 9
+composer ci                      # Full CI pipeline
 ```
