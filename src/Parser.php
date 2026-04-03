@@ -25,13 +25,27 @@ use JsonException;
  */
 final class Parser
 {
-    private const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
-    private const MAX_DEPTH = 50;
+    // ── Configuration ──────────────────────────────────────────
+
+    private const int MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+
+    private const int MAX_DEPTH = 50;
+
+    // ── State ──────────────────────────────────────────────────
 
     private int $currentLine = 0;
+
     private string $currentFile = '';
+
     private bool $strictSecurity = false;
 
+    // ── Public API ──────────────────────────────────────────────
+
+    /**
+     * Enable or disable strict security checks.
+     *
+     * @param bool $strict Whether to enable strict security
+     */
     public function enableStrictSecurity(bool $strict = true): self
     {
         $this->strictSecurity = $strict;
@@ -216,6 +230,8 @@ final class Parser
         return $data;
     }
 
+    // ── Internal Parser ─────────────────────────────────────────
+
     /**
      * Process a key-value pair.
      *
@@ -346,6 +362,8 @@ final class Parser
         return $raw;
     }
 
+    // ── Security & Validation ──────────────────────────────────
+
     /**
      * Validate file path for security (prevent path traversal).
      *
@@ -456,6 +474,12 @@ final class Parser
         }
     }
 
+    // ── Reference Resolution ───────────────────────────────────
+
+    /**
+     * @param array<string, mixed> $data
+     * @param array<string, mixed> $rootData
+     */
     private function resolveReferences(array &$data, array &$rootData): void
     {
         foreach ($data as $key => &$value) {
@@ -467,6 +491,11 @@ final class Parser
         }
     }
 
+    /**
+     * @param mixed $node
+     * @param array<string, mixed> $rootData
+     * @param array<int, string> $resolvingPath
+     */
     private function resolveNode(mixed &$node, array &$rootData, array $resolvingPath): void
     {
         if (!is_string($node)) {
@@ -512,7 +541,9 @@ final class Parser
                         $val === true => 'true',
                         $val === false => 'false',
                         $val === null => 'null',
-                        default => (string) $val,
+                        is_scalar($val) => (string) $val,
+                        is_array($val) => json_encode($val) ?: '[]',
+                        default => 'unknown',
                     };
                 },
                 $node
@@ -520,6 +551,10 @@ final class Parser
         }
     }
 
+    /**
+     * @param array<string, mixed> $rootData
+     * @param array<int, string> $resolvingPath
+     */
     private function resolveVariable(string $path, array &$rootData, array $resolvingPath): mixed
     {
         if (in_array($path, $resolvingPath, true)) {

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace MonkeysLegion\Mlc\Tests;
+namespace MonkeysLegion\Mlc\Tests\Unit;
 
 use MonkeysLegion\Mlc\Config;
 use MonkeysLegion\Mlc\Exception\ConfigException;

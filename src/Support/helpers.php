@@ -1,4 +1,5 @@
 <?php
+declare(strict_types=1);
 
 /**
  * Get the value of an environment variable.

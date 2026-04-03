@@ -48,21 +48,26 @@ use Psr\SimpleCache\CacheInterface;
  */
 final class Loader
 {
+    // ── State ──────────────────────────────────────────────────
+
     /**
      * Whether environment variables have been loaded.
      */
     private bool $envLoaded = false;
+
     private ?ConfigValidatorInterface $validator = null;
+
+    // ── Lifecycle ──────────────────────────────────────────────
 
     /**
      * Loader constructor.
      *
-     * @param Parser $parser Parser instance
-     * @param string $baseDir Directory containing .mlc files
-     * @param string|null $envDir Directory containing .env files (defaults to baseDir)
-     * @param CacheInterface|null $cache Optional PSR-16 cache implementation
-     * @param bool $autoLoadEnv Automatically load .env files (default: true)
-     * @param bool $strictSecurity Throw exceptions if files are world-writable (default: false)
+     * @param Parser              $parser         Parser instance
+     * @param string              $baseDir        Directory containing .mlc files
+     * @param string|null         $envDir         Directory containing .env files (defaults to baseDir)
+     * @param CacheInterface|null $cache          Optional PSR-16 cache implementation
+     * @param bool                $autoLoadEnv    Automatically load .env files (default: true)
+     * @param bool                $strictSecurity Throw exceptions if files are world-writable (default: false)
      */
     public function __construct(
         private Parser $parser,
@@ -70,7 +75,7 @@ final class Loader
         private ?string $envDir = null,
         private ?CacheInterface $cache = null,
         private bool $autoLoadEnv = true,
-        bool $strictSecurity = false
+        bool $strictSecurity = false,
     ) {
         if ($strictSecurity) {
             $this->parser->enableStrictSecurity();
@@ -79,13 +84,13 @@ final class Loader
         // Validate base directory
         if (!is_dir($this->baseDir)) {
             throw new LoaderException(
-                "Config directory not found: {$this->baseDir}"
+                "Config directory not found: {$this->baseDir}",
             );
         }
 
         if (!is_readable($this->baseDir)) {
             throw new LoaderException(
-                "Config directory not readable: {$this->baseDir}"
+                "Config directory not readable: {$this->baseDir}",
             );
         }
 
@@ -94,6 +99,8 @@ final class Loader
             $this->loadEnvironment();
         }
     }
+
+    // ── Public API ──────────────────────────────────────────────
 
     /**
      * Load and merge multiple named files.
@@ -129,8 +136,11 @@ final class Loader
             try {
                 $cached = $this->cache->get($cacheKey);
                 
-                if ($cached !== null && $this->isCacheValid($names, $cached)) {
-                    return new Config($cached['data']);
+                if (is_array($cached) && $this->isCacheValid($names, $cached)) {
+                    $data = $cached['data'] ?? null;
+                    if (is_array($data)) {
+                        return new Config($data);
+                    }
                 }
             } catch (\Throwable) {
                 // Cache read failed, continue to load from files
@@ -224,14 +234,14 @@ final class Loader
         }
 
         $cacheKey = $this->generateCacheKey($names);
-        
+
         try {
             $cached = $this->cache->get($cacheKey);
-            
-            if ($cached === null) {
+
+            if (!is_array($cached)) {
                 return true;
             }
-            
+
             return !$this->isCacheValid($names, $cached);
         } catch (\Throwable $e) {
             return true;
@@ -264,10 +274,12 @@ final class Loader
             throw new LoaderException(
                 "Failed to clear cache: {$e->getMessage()}",
                 0,
-                $e
+                $e,
             );
         }
     }
+
+    // ── Environment ───────────────────────────────────────────
 
     /**
      * Load environment files.
@@ -365,6 +377,8 @@ final class Loader
         return null;
     }
 
+    // ── Internals ──────────────────────────────────────────────
+
     /**
      * Resolve full path to a config file.
      */
@@ -401,7 +415,7 @@ final class Loader
      */
     private function isCacheValid(array $names, array $cached): bool
     {
-        if (!isset($cached['files'], $cached['mtimes'])) {
+        if (!isset($cached['files'], $cached['mtimes']) || !is_array($cached['files']) || !is_array($cached['mtimes'])) {
             return false;
         }
 
@@ -410,14 +424,19 @@ final class Loader
             return false;
         }
 
+        /** @var array<int|string, mixed> $files */
+        $files = $cached['files'];
+        /** @var array<int|string, mixed> $mtimes */
+        $mtimes = $cached['mtimes'];
+
         // Check if any file has been modified
-        foreach ($cached['files'] as $i => $file) {
-            if (!file_exists($file)) {
+        foreach ($files as $i => $file) {
+            if (!is_string($file) || !file_exists($file)) {
                 return false;
             }
 
             $currentMtime = filemtime($file);
-            if ($currentMtime !== $cached['mtimes'][$i]) {
+            if (!isset($mtimes[$i]) || $currentMtime !== $mtimes[$i]) {
                 return false;
             }
         }

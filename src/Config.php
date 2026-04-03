@@ -54,15 +54,19 @@ final class Config
     /** @var array<string, mixed> Internal get-result cache for repeated dot-path lookups */
     private array $lookupCache = [];
 
-    /** @param array<string, mixed> $data */
+    // ── Lifecycle ──────────────────────────────────────────────
+
+    /**
+     * Config constructor.
+     *
+     * @param array<string, mixed> $data Compiled base layer
+     */
     public function __construct(array $data)
     {
         $this->data = $data;
     }
 
-    // =========================================================================
-    // Read API
-    // =========================================================================
+    // ── Read API ───────────────────────────────────────────────
 
     /**
      * Retrieve a value by dot-notation (e.g. 'database.host').
@@ -209,9 +213,7 @@ final class Config
         return $value;
     }
 
-    // =========================================================================
-    // Utility / export
-    // =========================================================================
+    // ── Utilities & Exports ─────────────────────────────────────
 
     /**
      * Return the compiled base data (does not include runtime overrides).
@@ -265,9 +267,7 @@ final class Config
         return $this->data;
     }
 
-    // =========================================================================
-    // Dual-Layer Override Engine
-    // =========================================================================
+    // ── Dual-Layer Override Engine ─────────────────────────────
 
     /**
      * Apply a non-destructive runtime override on top of the compiled base.
@@ -330,9 +330,7 @@ final class Config
         return $this->runtimeOverrides;
     }
 
-    // =========================================================================
-    // Locks
-    // =========================================================================
+    // ── Locks ───────────────────────────────────────────────────
 
     /**
      * Lock 1 — Seal the config entirely (no overrides allowed).
@@ -382,9 +380,7 @@ final class Config
         return $this->overridesLocked;
     }
 
-    // =========================================================================
-    // Snapshotting
-    // =========================================================================
+    // ── Snapshotting ────────────────────────────────────────────
 
     /**
      * Flatten the compiled base + runtime overrides into a fresh, unlocked Config.
@@ -424,9 +420,7 @@ final class Config
         return new self($merged);
     }
 
-    // =========================================================================
-    // Internal lookup-cache management
-    // =========================================================================
+    // ── Internal Cache Management ───────────────────────────────
 
     /**
      * Clear lookup-cache entries for a path and all cached children.

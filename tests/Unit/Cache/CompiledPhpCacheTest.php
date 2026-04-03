@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace MonkeysLegion\Mlc\Tests\Cache;
+namespace MonkeysLegion\Mlc\Tests\Unit\Cache;
 
 use MonkeysLegion\Mlc\Cache\CompiledPhpCache;
 use MonkeysLegion\Mlc\Config;
@@ -40,21 +40,21 @@ final class CompiledPhpCacheTest extends TestCase
     // =========================================================================
 
     #[Group('cache')]
-    public function testSetAndGet(): void
+    public function test_set_and_get(): void
     {
         $this->assertTrue($this->cache->set('foo', 'bar'));
         $this->assertSame('bar', $this->cache->get('foo'));
     }
 
     #[Group('cache')]
-    public function testGetNonExistentReturnsDefault(): void
+    public function test_get_non_existent_returns_default(): void
     {
         $this->assertNull($this->cache->get('nothing'));
         $this->assertSame('default', $this->cache->get('nothing', 'default'));
     }
 
     #[Group('cache')]
-    public function testHas(): void
+    public function test_has(): void
     {
         $this->assertFalse($this->cache->has('foo'));
         $this->cache->set('foo', 'bar');
@@ -62,7 +62,7 @@ final class CompiledPhpCacheTest extends TestCase
     }
 
     #[Group('cache')]
-    public function testDelete(): void
+    public function test_delete(): void
     {
         $this->cache->set('foo', 'bar');
         $this->assertTrue($this->cache->delete('foo'));
@@ -71,14 +71,14 @@ final class CompiledPhpCacheTest extends TestCase
     }
 
     #[Group('cache')]
-    public function testDeleteNonExistentReturnsTrue(): void
+    public function test_delete_non_existent_returns_true(): void
     {
         // PSR-16: delete() MUST return true even if the key did not exist
         $this->assertTrue($this->cache->delete('ghost'));
     }
 
     #[Group('cache')]
-    public function testClear(): void
+    public function test_clear(): void
     {
         $this->cache->set('a', 1);
         $this->cache->set('b', 2);
@@ -92,7 +92,7 @@ final class CompiledPhpCacheTest extends TestCase
     // =========================================================================
 
     #[Group('cache')]
-    public function testTtlIsIgnoredCacheIsImmutable(): void
+    public function test_ttl_is_ignored_cache_is_immutable(): void
     {
         // TTL must be silently ignored — CompiledPhpCache is immutable by design.
         $this->cache->set('key', 'value', 1);   // ttl=1s — ignored
@@ -101,7 +101,7 @@ final class CompiledPhpCacheTest extends TestCase
     }
 
     #[Group('cache')]
-    public function testCompiledFileIsValidPhp(): void
+    public function test_compiled_file_is_valid_php(): void
     {
         $data = ['database' => ['host' => 'localhost', 'port' => 3306]];
         $this->cache->set('config', $data);
@@ -117,7 +117,7 @@ final class CompiledPhpCacheTest extends TestCase
     }
 
     #[Group('cache')]
-    public function testCompiledFileIsReloadedAsArray(): void
+    public function test_compiled_file_is_reloaded_as_array(): void
     {
         $data = ['key' => 'value', 'nested' => ['a' => true, 'b' => 42]];
         $this->cache->set('reload_test', $data);
@@ -127,7 +127,7 @@ final class CompiledPhpCacheTest extends TestCase
     }
 
     #[Group('cache')]
-    public function testSetOverwritesExistingKey(): void
+    public function test_set_overwrites_existing_key(): void
     {
         $this->cache->set('key', 'first');
         $this->cache->set('key', 'second');
@@ -135,7 +135,7 @@ final class CompiledPhpCacheTest extends TestCase
     }
 
     #[Group('cache')]
-    public function testComplexNestedData(): void
+    public function test_complex_nested_data(): void
     {
         $data = [
             'nested' => ['a' => 1, 'b' => true, 'c' => null],
@@ -153,7 +153,7 @@ final class CompiledPhpCacheTest extends TestCase
     // =========================================================================
 
     #[Group('cache')]
-    public function testGetMultiple(): void
+    public function test_get_multiple(): void
     {
         $this->cache->set('x', 10);
         $this->cache->set('y', 20);
@@ -166,7 +166,7 @@ final class CompiledPhpCacheTest extends TestCase
     }
 
     #[Group('cache')]
-    public function testSetMultiple(): void
+    public function test_set_multiple(): void
     {
         $this->assertTrue($this->cache->setMultiple(['p' => 'ping', 'q' => 'pong']));
         $this->assertSame('ping', $this->cache->get('p'));
@@ -174,7 +174,7 @@ final class CompiledPhpCacheTest extends TestCase
     }
 
     #[Group('cache')]
-    public function testDeleteMultiple(): void
+    public function test_delete_multiple(): void
     {
         $this->cache->set('m', 1);
         $this->cache->set('n', 2);
@@ -188,7 +188,7 @@ final class CompiledPhpCacheTest extends TestCase
     // =========================================================================
 
     #[Group('dual-layer')]
-    public function testFreshConfigHasNothingLocked(): void
+    public function test_fresh_config_has_nothing_locked(): void
     {
         $config = new Config(['key' => 'val']);
 
@@ -198,7 +198,7 @@ final class CompiledPhpCacheTest extends TestCase
     }
 
     #[Group('dual-layer')]
-    public function testGetReadsBypassesOverrideLayerWhenDormant(): void
+    public function test_get_reads_bypasses_override_layer_when_dormant(): void
     {
         $config = new Config(['db' => ['host' => 'localhost']]);
 
@@ -212,7 +212,7 @@ final class CompiledPhpCacheTest extends TestCase
     // =========================================================================
 
     #[Group('dual-layer')]
-    public function testFirstOverrideActivatesDualLayer(): void
+    public function test_first_override_activates_dual_layer(): void
     {
         $config = new Config(['x' => 1]);
         $this->assertFalse($config->isDualLayerActive());
@@ -224,7 +224,7 @@ final class CompiledPhpCacheTest extends TestCase
     }
 
     #[Group('dual-layer')]
-    public function testOverrideShadowsBaseValue(): void
+    public function test_override_shadows_base_value(): void
     {
         $config = new Config(['db' => ['host' => 'localhost', 'port' => 3306]]);
         $config->override('db.host', '10.0.0.1');
@@ -235,7 +235,7 @@ final class CompiledPhpCacheTest extends TestCase
     }
 
     #[Group('dual-layer')]
-    public function testOverrideAddsNewKey(): void
+    public function test_override_adds_new_key(): void
     {
         $config = new Config(['existing' => 'yes']);
         $config->override('brand_new', 'runtime_value');
@@ -245,7 +245,7 @@ final class CompiledPhpCacheTest extends TestCase
     }
 
     #[Group('dual-layer')]
-    public function testBaseLayerIsNeverMutated(): void
+    public function test_base_layer_is_never_mutated(): void
     {
         $config = new Config(['env' => 'production']);
         $config->override('env', 'testing');
@@ -258,7 +258,7 @@ final class CompiledPhpCacheTest extends TestCase
     }
 
     #[Group('dual-layer')]
-    public function testMultipleOverridesAccumulate(): void
+    public function test_multiple_overrides_accumulate(): void
     {
         $config = new Config(['a' => 1, 'b' => 2, 'c' => 3]);
         $config->override('a', 10);
@@ -270,7 +270,7 @@ final class CompiledPhpCacheTest extends TestCase
     }
 
     #[Group('dual-layer')]
-    public function testGetOverridesReturnsMap(): void
+    public function test_get_overrides_returns_map(): void
     {
         $config = new Config(['x' => 1]);
         $config->override('x', 99);
@@ -285,7 +285,7 @@ final class CompiledPhpCacheTest extends TestCase
     // =========================================================================
 
     #[Group('dual-layer')]
-    public function testLockSetsFlag(): void
+    public function test_lock_sets_flag(): void
     {
         $config = new Config(['x' => 1]);
         $this->assertFalse($config->isLocked());
@@ -294,7 +294,7 @@ final class CompiledPhpCacheTest extends TestCase
     }
 
     #[Group('dual-layer')]
-    public function testLockBlocksOverride(): void
+    public function test_lock_blocks_override(): void
     {
         $config = new Config(['key' => 'val']);
         $config->lock();
@@ -305,7 +305,7 @@ final class CompiledPhpCacheTest extends TestCase
     }
 
     #[Group('dual-layer')]
-    public function testLockAfterSomeOverridesPreservesExisting(): void
+    public function test_lock_after_some_overrides_preserves_existing(): void
     {
         $config = new Config(['a' => 1]);
         $config->override('a', 99);  // dual-layer activated
@@ -320,7 +320,7 @@ final class CompiledPhpCacheTest extends TestCase
     }
 
     #[Group('dual-layer')]
-    public function testLockDoesNotBlockGet(): void
+    public function test_lock_does_not_block_get(): void
     {
         $config = new Config(['k' => 'v']);
         $config->lock();
@@ -330,7 +330,7 @@ final class CompiledPhpCacheTest extends TestCase
     }
 
     #[Group('dual-layer')]
-    public function testLockDoesNotBlockSnapshot(): void
+    public function test_lock_does_not_block_snapshot(): void
     {
         $config = new Config(['k' => 'v']);
         $config->lock();
@@ -344,7 +344,7 @@ final class CompiledPhpCacheTest extends TestCase
     // =========================================================================
 
     #[Group('dual-layer')]
-    public function testLockOverridesSetsFlag(): void
+    public function test_lock_overrides_sets_flag(): void
     {
         $config = new Config(['x' => 1]);
         $this->assertFalse($config->areOverridesLocked());
@@ -353,7 +353,7 @@ final class CompiledPhpCacheTest extends TestCase
     }
 
     #[Group('dual-layer')]
-    public function testLockOverridesBlocksFurtherOverrides(): void
+    public function test_lock_overrides_blocks_further_overrides(): void
     {
         $config = new Config(['feature' => false]);
         $config->override('feature', true);
@@ -365,7 +365,7 @@ final class CompiledPhpCacheTest extends TestCase
     }
 
     #[Group('dual-layer')]
-    public function testLockOverridesPreservesAppliedOverrides(): void
+    public function test_lock_overrides_preserves_applied_overrides(): void
     {
         $config = new Config(['mode' => 'prod']);
         $config->override('mode', 'debug');
@@ -375,7 +375,7 @@ final class CompiledPhpCacheTest extends TestCase
     }
 
     #[Group('dual-layer')]
-    public function testLockOverridesBeforeAnyOverrideActsLikeLock(): void
+    public function test_lock_overrides_before_any_override_acts_like_lock(): void
     {
         $config = new Config(['x' => 1]);
         $config->lockOverrides(); // no overrides applied yet
@@ -389,14 +389,14 @@ final class CompiledPhpCacheTest extends TestCase
     // =========================================================================
 
     #[Group('dual-layer')]
-    public function testSnapshotReturnsNewInstance(): void
+    public function test_snapshot_returns_new_instance(): void
     {
         $config = new Config(['a' => 1]);
         $this->assertNotSame($config, $config->snapshot());
     }
 
     #[Group('dual-layer')]
-    public function testSnapshotWithNoDualLayerClonesBase(): void
+    public function test_snapshot_with_no_dual_layer_clones_base(): void
     {
         $config = new Config(['k' => 'v']);
         $snap   = $config->snapshot();
@@ -406,7 +406,7 @@ final class CompiledPhpCacheTest extends TestCase
     }
 
     #[Group('dual-layer')]
-    public function testSnapshotMergesOverridesIntoBase(): void
+    public function test_snapshot_merges_overrides_into_base(): void
     {
         $config = new Config(['db' => ['host' => 'localhost', 'port' => 5432]]);
         $config->override('db.host', 'db.internal');
@@ -420,7 +420,7 @@ final class CompiledPhpCacheTest extends TestCase
     }
 
     #[Group('dual-layer')]
-    public function testSnapshotIsIsolatedFromOriginal(): void
+    public function test_snapshot_is_isolated_from_original(): void
     {
         $config = new Config(['counter' => 0]);
         $snap   = $config->snapshot();
@@ -431,7 +431,7 @@ final class CompiledPhpCacheTest extends TestCase
     }
 
     #[Group('dual-layer')]
-    public function testSnapshotOfLockedConfigIsUnlocked(): void
+    public function test_snapshot_of_locked_config_is_unlocked(): void
     {
         $config = new Config(['k' => 'v']);
         $config->lock();
@@ -445,7 +445,7 @@ final class CompiledPhpCacheTest extends TestCase
     }
 
     #[Group('dual-layer')]
-    public function testSnapshotAfterLockOverridesIsUnlocked(): void
+    public function test_snapshot_after_lock_overrides_is_unlocked(): void
     {
         $config = new Config(['a' => 1]);
         $config->override('a', 2);
@@ -463,7 +463,7 @@ final class CompiledPhpCacheTest extends TestCase
     // =========================================================================
 
     #[Group('cache')]
-    public function testConstructorThrowsOnNonCreatableDirectory(): void
+    public function test_constructor_throws_on_non_creatable_directory(): void
     {
         if (get_current_user() === 'root') {
             $this->markTestSkipped('Cannot test permission errors as root');
@@ -485,7 +485,7 @@ final class CompiledPhpCacheTest extends TestCase
     }
 
     #[Group('cache')]
-    public function testSetReturnsFalseWhenDirectoryIsUnwritable(): void
+    public function test_set_returns_false_when_directory_is_unwritable(): void
     {
         if (get_current_user() === 'root') {
             $this->markTestSkipped('Cannot test permission errors as root');
@@ -512,7 +512,7 @@ final class CompiledPhpCacheTest extends TestCase
     }
 
     #[Group('cache')]
-    public function testSetMultipleReturnsFalseWhenOneWriteFails(): void
+    public function test_set_multiple_returns_false_when_one_write_fails(): void
     {
         if (get_current_user() === 'root') {
             $this->markTestSkipped('Cannot test permission errors as root');
@@ -541,7 +541,7 @@ final class CompiledPhpCacheTest extends TestCase
     }
 
     #[Group('cache')]
-    public function testDeleteMultipleReturnsFalseWhenOneUnlinkFails(): void
+    public function test_delete_multiple_returns_false_when_one_unlink_fails(): void
     {
         if (get_current_user() === 'root') {
             $this->markTestSkipped('Cannot test permission errors as root');

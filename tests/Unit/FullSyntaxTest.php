@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace MonkeysLegion\Mlc\Tests;
+namespace MonkeysLegion\Mlc\Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
 use MonkeysLegion\Mlc\Parser;
