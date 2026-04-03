@@ -39,6 +39,18 @@ final class Parser
 
     private bool $strictSecurity = false;
 
+    /**
+     * Stack of files currently being parsed to detect circular inclusions.
+     * @var string[]
+     */
+    private array $includeStack = [];
+
+    /**
+     * List of all files parsed during the last operation (including recursive includes).
+     * @var string[]
+     */
+    private array $allParsedFiles = [];
+
     // ── Public API ──────────────────────────────────────────────
 
     /**
@@ -61,24 +73,57 @@ final class Parser
      */
     public function parseFile(string $file): array
     {
-        $this->currentFile = $file;
-        $this->currentLine = 0;
+        $this->allParsedFiles = [];
+        $this->includeStack = [$file];
+        $data = $this->parseFileInternal($file);
+        $this->includeStack = [];
 
-        // Security checks
-        $this->validateFilePath($file);
-        $this->validateFileAccess($file);
-        $this->validateFileSize($file);
+        // Final resolution pass for cross-file references
+        $this->resolveReferences($data, $data);
 
-        $content = @file_get_contents($file);
-        if ($content === false) {
-            throw new ParserException(
-                "Failed to read config file: {$file}",
-                0,
-                $file
-            );
+        return $data;
+    }
+
+    /**
+     * Internal parse method that doesn't trigger final reference resolution.
+     *
+     * @param string $file
+     * @return array<string, mixed>
+     */
+    private function parseFileInternal(string $file): array
+    {
+        $oldFile = $this->currentFile;
+        $oldLine = $this->currentLine;
+
+        try {
+            $this->currentFile = $file;
+            $this->currentLine = 0;
+
+            // Security checks
+            $this->validateFilePath($file);
+            $this->validateFileAccess($file);
+            $this->validateFileSize($file);
+
+            // Add to the list of all parsed files for cache tracking
+            $realPath = realpath($file);
+            if ($realPath && !in_array($realPath, $this->allParsedFiles, true)) {
+                $this->allParsedFiles[] = $realPath;
+            }
+
+            $content = @file_get_contents($file);
+            if ($content === false) {
+                throw new ParserException(
+                    "Failed to read config file: {$file}",
+                    0,
+                    $file
+                );
+            }
+
+            return $this->parseContent($content, $file, false);
+        } finally {
+            $this->currentFile = $oldFile;
+            $this->currentLine = $oldLine;
         }
-
-        return $this->parseContent($content, $file);
     }
 
     /**
@@ -86,11 +131,16 @@ final class Parser
      *
      * @param string $content MLC content
      * @param string $filename Optional filename for error messages
+     * @param bool   $resolveReferences Whether to resolve variable references
      * @return array<string, mixed> Parsed configuration data
      * @throws ParserException
      */
-    public function parseContent(string $content, string $filename = '<string>'): array
+    public function parseContent(string $content, string $filename = '<string>', bool $resolveReferences = true): array
     {
+        // Reset allParsedFiles if this is the start of a parsing operation from a string
+        if ($filename === '<string>' && empty($this->includeStack)) {
+            $this->allParsedFiles = [];
+        }
         $this->currentFile = $filename;
         $this->currentLine = 0;
 
@@ -135,6 +185,40 @@ final class Parser
 
             // Skip empty lines & comments
             if ($line === '' || str_starts_with($line, '#')) {
+                continue;
+            }
+
+            // Recursive include: @include "other.mlc", @include <other.mlc>, @include other.mlc
+            if (preg_match('/^@include\s+(?P<f>".+?"|\'.+?\'|<.+?>|[^\s"\'<>{}]+)$/', $line, $m)) {
+                $rawFile = $m['f'];
+                
+                // Remove wrappers if present (" ", ' ', < >)
+                $first = $rawFile[0] ?? '';
+                $last = substr($rawFile, -1);
+                
+                if (($first === '"' && $last === '"') || 
+                    ($first === "'" && $last === "'") || 
+                    ($first === '<' && $last === '>')) {
+                    $includeFile = substr($rawFile, 1, -1);
+                } else {
+                    $includeFile = $rawFile;
+                }
+                $fullPath = $this->resolveIncludePath($includeFile);
+
+                if (in_array($fullPath, $this->includeStack, true)) {
+                    throw new ParserException(
+                        "Circular include detected: " . implode(' -> ', $this->includeStack) . " -> {$fullPath}",
+                        $this->currentLine,
+                        $this->currentFile
+                    );
+                }
+
+                $this->includeStack[] = $fullPath;
+                $includedData = $this->parseFileInternal($fullPath);
+                array_pop($this->includeStack);
+
+                $current = &$stack[count($stack) - 1];
+                $current = array_replace_recursive($current, $includedData);
                 continue;
             }
 
@@ -225,9 +309,21 @@ final class Parser
             );
         }
 
-        $this->resolveReferences($data, $data);
+        if ($resolveReferences) {
+            $this->resolveReferences($data, $data);
+        }
 
         return $data;
+    }
+
+    /**
+     * Get all files parsed during the last operation.
+     *
+     * @return string[]
+     */
+    public function getParsedFiles(): array
+    {
+        return $this->allParsedFiles;
     }
 
     // ── Internal Parser ─────────────────────────────────────────
@@ -360,6 +456,23 @@ final class Parser
 
         // Unquoted string
         return $raw;
+    }
+
+    /**
+     * Resolve an include path relative to the current file.
+     */
+    private function resolveIncludePath(string $includeFile): string
+    {
+        if ($this->currentFile === '<string>') {
+            return $includeFile;
+        }
+
+        $baseDir = dirname($this->currentFile);
+        $path = $baseDir . DIRECTORY_SEPARATOR . $includeFile;
+
+        // Try to get realpath to normalize it
+        $real = realpath($path);
+        return $real ?: $path;
     }
 
     // ── Security & Validation ──────────────────────────────────

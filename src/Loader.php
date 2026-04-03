@@ -153,10 +153,17 @@ final class Loader
         
         foreach ($names as $name) {
             $path = $this->resolveConfigPath($name);
-            $files[] = $path;
             
             try {
                 $data = $this->parser->parseFile($path);
+                
+                // Track ALL files involved (including recursive includes) for cache invalidation
+                foreach ($this->parser->getParsedFiles() as $parsedPath) {
+                    if (!in_array($parsedPath, $files, true)) {
+                        $files[] = $parsedPath;
+                    }
+                }
+
                 $merged = array_replace_recursive($merged, $data);
             } catch (\Throwable $e) {
                 throw new LoaderException(
@@ -416,11 +423,6 @@ final class Loader
     private function isCacheValid(array $names, array $cached): bool
     {
         if (!isset($cached['files'], $cached['mtimes']) || !is_array($cached['files']) || !is_array($cached['mtimes'])) {
-            return false;
-        }
-
-        // Check if number of files matches
-        if (count($cached['files']) !== count($names)) {
             return false;
         }
 

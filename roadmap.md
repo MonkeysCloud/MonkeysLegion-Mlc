@@ -83,7 +83,7 @@ This roadmap outlines the evolution of the MonkeysLegion MLC configuration libra
 - **Priority**: Medium
 
 ### 2.3 Recursive Includes
-- [ ] **Task**: Support `include "other.mlc"` syntax.
+- [x] **Task**: Support `include "other.mlc"` syntax.
 - **Technical Detail**:
     - Update the parser regex to detect `include` statements.
     - Recursively call `parseFile()` and merge results.

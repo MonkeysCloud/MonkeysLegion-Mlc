@@ -118,6 +118,36 @@ health   = "${base_url}/health"
 
 > **Circular reference protection**: MLC uses a Dependency Graph Tracker. If a circular reference is detected (`a = ${b}`, `b = ${a}`), a `CircularDependencyException` is thrown immediately.
 
+### Recursive Includes
+
+You can split your configuration into multiple files and include them using the `@include` statement. Paths are resolved relative to the current file.
+
+#### Supported Syntaxes
+
+At least one space is required between `@include` and the path.
+
+| Syntax             | Example                           | Note                                                         |
+|--------------------|-----------------------------------|--------------------------------------------------------------|
+| **Unquoted**       | `@include base.mlc`               | Recommended for simple filenames; cannot contain spaces.     |
+| **Quotes**         | `@include "extra settings.mlc"`   | Single or double quotes; required if path contains spaces. |
+| **Angle Brackets** | `@include <shared.mlc>`           | C-style inclusion; provides an alternative clear grouping. |
+
+```mlc
+# app.mlc
+app_name = "My Application"
+
+# Top-level inclusion
+@include database.mlc
+
+# Scoped inclusion
+network {
+    @include "network_defaults.mlc"
+    port = 8080 # Overrides anything from network_defaults.mlc
+}
+```
+
+> **Circular include protection**: MLC tracks the inclusion stack. If a file tries to include itself or a file currently being parsed, a `ParserException` is thrown.
+
 ---
 
 ## 📖 Loading Configuration
