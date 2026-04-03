@@ -10,6 +10,8 @@ use MonkeysLegion\Mlc\Exception\CircularDependencyException;
 
 use JsonException;
 
+use MonkeysLegion\Mlc\Contracts\ParserInterface;
+
 /**
  * Production-grade MLC Parser
  *
@@ -23,7 +25,7 @@ use JsonException;
  * - Circular reference detection
  * - Performance optimizations
  */
-final class Parser
+final class Parser implements ParserInterface
 {
     // ── Configuration ──────────────────────────────────────────
 

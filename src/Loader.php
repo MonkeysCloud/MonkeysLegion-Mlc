@@ -8,8 +8,10 @@ use Dotenv\Dotenv;
 use Dotenv\Exception\InvalidPathException;
 use MonkeysLegion\Mlc\Exception\LoaderException;
 use MonkeysLegion\Mlc\Contracts\ConfigValidatorInterface;
+use MonkeysLegion\Mlc\Contracts\ParserInterface;
+use MonkeysLegion\Mlc\Contracts\LoaderInterface;
 use MonkeysLegion\Mlc\Cache\CompiledPhpCache;
-use Psr\SimpleCache\CacheInterface;
+use MonkeysLegion\Mlc\Contracts\CacheInterface;
 
 /**
  * Production-grade configuration loader.
@@ -23,30 +25,8 @@ use Psr\SimpleCache\CacheInterface;
  * Usage:
  *   $loader = new Loader(new Parser(), '/path/to/config');
  *   $config = $loader->load(['app', 'cors']);
- *
- * With caching (using MonkeysLegion-Cache):
- *   use MonkeysLegion\Cache\CacheManager;
- *   
- *   $cacheConfig = [
- *       'default' => 'file',
- *       'stores' => [
- *           'file' => [
- *               'driver' => 'file',
- *               'path' => '/var/cache/mlc',
- *               'prefix' => 'mlc_',
- *           ]
- *       ]
- *   ];
- *   $cacheManager = new CacheManager($cacheConfig);
- *   $cache = $cacheManager->store('file');
- *   
- *   $loader = new Loader(
- *       new Parser(),
- *       '/path/to/config',
- *       cache: $cache
- *   );
  */
-final class Loader
+final class Loader implements LoaderInterface
 {
     // ── State ──────────────────────────────────────────────────
 
@@ -62,7 +42,7 @@ final class Loader
     /**
      * Loader constructor.
      *
-     * @param Parser              $parser         Parser instance
+     * @param ParserInterface     $parser         Parser implementation
      * @param string              $baseDir        Directory containing .mlc files
      * @param string|null         $envDir         Directory containing .env files (defaults to baseDir)
      * @param CacheInterface|null $cache          Optional PSR-16 cache implementation
@@ -70,7 +50,7 @@ final class Loader
      * @param bool                $strictSecurity Throw exceptions if files are world-writable (default: false)
      */
     public function __construct(
-        private Parser $parser,
+        private ParserInterface $parser,
         private string $baseDir,
         private ?string $envDir = null,
         private ?CacheInterface $cache = null,

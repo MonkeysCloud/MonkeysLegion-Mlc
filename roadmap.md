@@ -96,7 +96,7 @@ This roadmap outlines the evolution of the MonkeysLegion MLC configuration libra
 *Focus: Decoupling and extensibility.*
 
 ### 3.1 Component Interfacing
-- [ ] **Task**: Define `ParserInterface`, `LoaderInterface`, and `CacheInterface`.
+- [x] **Task**: Define `ParserInterface`, `LoaderInterface`, and `CacheInterface`.
 - **Technical Detail**:
     - Extract methods from current concrete classes.
     - Allow dependency injection of custom parsers (e.g., for JSON/YAML).

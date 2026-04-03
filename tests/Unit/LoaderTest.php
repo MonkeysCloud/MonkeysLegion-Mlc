@@ -10,7 +10,7 @@ use MonkeysLegion\Mlc\Parser;
 use MonkeysLegion\Mlc\Config;
 use MonkeysLegion\Mlc\Exception\LoaderException;
 use MonkeysLegion\Mlc\Contracts\ConfigValidatorInterface;
-use Psr\SimpleCache\CacheInterface;
+use MonkeysLegion\Mlc\Contracts\CacheInterface;
 
 class LoaderTest extends TestCase
 {
@@ -181,7 +181,6 @@ class LoaderTest extends TestCase
         // Use reflection to test private resolveAppEnv
         $reflection = new \ReflectionClass(Loader::class);
         $method = $reflection->getMethod('resolveAppEnv');
-        $method->setAccessible(true);
         
         $res = $method->invoke($this->loader, $this->baseDir);
         $this->assertEquals('testing', $res);
@@ -195,7 +194,6 @@ class LoaderTest extends TestCase
         
         $reflection = new \ReflectionClass(Loader::class);
         $method = $reflection->getMethod('resolveAppEnv');
-        $method->setAccessible(true);
         
         $res = $method->invoke($this->loader, $this->baseDir);
         $this->assertEquals('staging', $res);
@@ -300,7 +298,6 @@ class LoaderTest extends TestCase
         file_put_contents($this->baseDir . '/.env', "# just a comment\nFOO=BAR");
         
         $reflection = new \ReflectionMethod(Loader::class, 'resolveAppEnv');
-        $reflection->setAccessible(true);
         
         $res = $reflection->invoke($this->loader, $this->baseDir);
         $this->assertNull($res);
@@ -309,7 +306,6 @@ class LoaderTest extends TestCase
     public function test_is_cache_valid_with_corrupt_cached_data_should_return_false(): void
     {
         $reflection = new \ReflectionMethod(Loader::class, 'isCacheValid');
-        $reflection->setAccessible(true);
         
         // Missing 'mtimes' in cached data
         $res = $reflection->invoke($this->loader, ['app'], ['files' => []]);
@@ -323,7 +319,6 @@ class LoaderTest extends TestCase
     public function test_is_cache_valid_with_missing_file_should_return_false(): void
     {
         $reflection = new \ReflectionMethod(Loader::class, 'isCacheValid');
-        $reflection->setAccessible(true);
         
         $path = $this->baseDir . '/missing.mlc';
         $res = $reflection->invoke($this->loader, ['missing'], [

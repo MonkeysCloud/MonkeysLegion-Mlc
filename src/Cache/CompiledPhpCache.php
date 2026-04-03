@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace MonkeysLegion\Mlc\Cache;
 
-use Psr\SimpleCache\CacheInterface;
+use MonkeysLegion\Mlc\Contracts\CacheInterface;
 
 /**
  * High-performance PSR-16 cache powered by PHP OPcache.
