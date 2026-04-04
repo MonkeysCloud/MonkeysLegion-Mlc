@@ -2,13 +2,16 @@
 
 declare(strict_types=1);
 
-namespace MonkeysLegion\Mlc\Tests\Unit;
+namespace MonkeysLegion\Mlc\Tests\Unit\Parsers;
 
-use MonkeysLegion\Env\Repositories\NativeEnvRepository;
 use PHPUnit\Framework\TestCase;
+use PHPUnit\Framework\Attributes\Test;
 use MonkeysLegion\Mlc\Parsers\MlcParser;
 use MonkeysLegion\Mlc\Loader;
 use MonkeysLegion\Mlc\Exception\SecurityException;
+use MonkeysLegion\Env\Repositories\NativeEnvRepository;
+use MonkeysLegion\Env\EnvManager;
+use MonkeysLegion\Env\Loaders\DotenvLoader;
 
 class SecurityAuditTest extends TestCase
 {
@@ -34,12 +37,20 @@ class SecurityAuditTest extends TestCase
         }
     }
 
+    private function createParser(): MlcParser
+    {
+        $repository = new NativeEnvRepository();
+        $bootstrapper = new EnvManager(new DotenvLoader(), $repository);
+        return new MlcParser($bootstrapper, $this->tempDir);
+    }
+
+    #[Test]
     public function test_loose_mode_triggers_warning_for_world_writable_file(): void
     {
         // Make file world-writable
         chmod($this->tempFile, 0777);
 
-        $parser = new MlcParser(new NativeEnvRepository());
+        $parser = $this->createParser();
 
         // PHPUnit can catch trigger_error via expectWarning
         // Or we can set a custom error handler to verify the exact warning.
@@ -59,11 +70,12 @@ class SecurityAuditTest extends TestCase
         $this->assertTrue($warningTriggered, "A warning should be triggered for world-writable files in loose mode.");
     }
 
+    #[Test]
     public function test_strict_mode_throws_security_exception_via_parser(): void
     {
         chmod($this->tempFile, 0777);
 
-        $parser = new MlcParser(new NativeEnvRepository());
+        $parser = $this->createParser();
         $parser->enableStrictSecurity();
 
         $this->expectException(SecurityException::class);
@@ -72,13 +84,13 @@ class SecurityAuditTest extends TestCase
         $parser->parseFile($this->tempFile);
     }
 
+    #[Test]
     public function test_strict_mode_propagates_from_loader_to_parser(): void
     {
         chmod($this->tempFile, 0777);
 
-        $parser = new MlcParser(new NativeEnvRepository());
+        $parser = $this->createParser();
         
-        // Pass strictSecurity = true as the 6th argument
         $loader = new Loader(
             parser: $parser,
             baseDir: $this->tempDir,
@@ -92,12 +104,13 @@ class SecurityAuditTest extends TestCase
         $loader->load(['config']);
     }
 
+    #[Test]
     public function test_strict_mode_allows_secure_files(): void
     {
         // 0644 is user writable, but not group/world writable
         chmod($this->tempFile, 0644);
 
-        $parser = new MlcParser(new NativeEnvRepository());
+        $parser = $this->createParser();
         $parser->enableStrictSecurity();
 
         $data = $parser->parseFile($this->tempFile);

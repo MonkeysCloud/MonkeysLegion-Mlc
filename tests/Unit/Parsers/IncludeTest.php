@@ -2,10 +2,13 @@
 
 declare(strict_types=1);
 
-namespace MonkeysLegion\Mlc\Tests\Unit;
+namespace MonkeysLegion\Mlc\Tests\Unit\Parsers;
 
 use MonkeysLegion\Env\Repositories\NativeEnvRepository;
+use MonkeysLegion\Env\EnvManager;
+use MonkeysLegion\Env\Loaders\DotenvLoader;
 use PHPUnit\Framework\TestCase;
+use PHPUnit\Framework\Attributes\Test;
 use MonkeysLegion\Mlc\Parsers\MlcParser;
 use MonkeysLegion\Mlc\Exception\ParserException;
 
@@ -17,9 +20,12 @@ class IncludeTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->parser = new MlcParser(new NativeEnvRepository());
         $this->tempDir = sys_get_temp_dir() . '/mlc_include_test_' . uniqid();
         mkdir($this->tempDir, 0777, true);
+        
+        $repository = new NativeEnvRepository();
+        $bootstrapper = new EnvManager(new DotenvLoader(), $repository);
+        $this->parser = new MlcParser($bootstrapper, $this->tempDir);
     }
 
     protected function tearDown(): void
@@ -42,6 +48,7 @@ class IncludeTest extends TestCase
         return $path;
     }
 
+    #[Test]
     public function test_basic_include_works(): void
     {
         $this->createConfigFile('db.mlc', 'host = "localhost"');
@@ -52,6 +59,7 @@ class IncludeTest extends TestCase
         $this->assertEquals(['host' => 'localhost'], $data);
     }
 
+    #[Test]
     public function test_nested_include_works(): void
     {
         $this->createConfigFile('nested.mlc', 'key = "val"');
@@ -62,6 +70,7 @@ class IncludeTest extends TestCase
         $this->assertEquals(['section' => ['key' => 'val']], $data);
     }
 
+    #[Test]
     public function test_recursive_include_works(): void
     {
         $this->createConfigFile('c.mlc', 'key_c = "c"');
@@ -77,6 +86,7 @@ class IncludeTest extends TestCase
         ], $data);
     }
 
+    #[Test]
     public function test_circular_include_throws_exception(): void
     {
         $this->createConfigFile('a.mlc', '@include "b.mlc"');
@@ -88,6 +98,7 @@ class IncludeTest extends TestCase
         $this->parser->parseFile($this->tempDir . '/a.mlc');
     }
 
+    #[Test]
     public function test_cross_file_references_work(): void
     {
         $this->createConfigFile('base.mlc', 'domain = "example.com"');
@@ -103,6 +114,7 @@ MLC
         $this->assertEquals('https://example.com/api', $data['url']);
     }
 
+    #[Test]
     public function test_include_overriding_behavior(): void
     {
         $this->createConfigFile('defaults.mlc', <<<MLC
@@ -122,6 +134,7 @@ MLC
         $this->assertEquals(5, $data['timeout']);
     }
 
+    #[Test]
     public function test_parser_tracks_all_parsed_files(): void
     {
         $dir = $this->tempDir;
@@ -136,6 +149,7 @@ MLC
         $this->assertContains(realpath($dir . '/db.mlc'), $parsedFiles);
     }
 
+    #[Test]
     public function test_include_with_single_quotes_and_spaces_works(): void
     {
         $this->createConfigFile('db details.mlc', 'host = "localhost"');
@@ -145,6 +159,7 @@ MLC
         $this->assertEquals(['host' => 'localhost'], $data);
     }
 
+    #[Test]
     public function test_include_with_double_quotes_and_spaces_works(): void
     {
         $this->createConfigFile('db details.mlc', 'host = "localhost"');
@@ -154,6 +169,7 @@ MLC
         $this->assertEquals(['host' => 'localhost'], $data);
     }
 
+    #[Test]
     public function test_unquoted_include_works(): void
     {
         $this->createConfigFile('unquoted.mlc', 'key = "val"');
@@ -163,6 +179,7 @@ MLC
         $this->assertEquals(['key' => 'val'], $data);
     }
 
+    #[Test]
     public function test_angle_bracket_include_works(): void
     {
         $this->createConfigFile('angle.mlc', 'key = "val"');
@@ -172,6 +189,7 @@ MLC
         $this->assertEquals(['key' => 'val'], $data);
     }
 
+    #[Test]
     public function test_multiple_spaces_after_include_works(): void
     {
         $this->createConfigFile('spaces.mlc', 'key = "val"');
@@ -181,6 +199,7 @@ MLC
         $this->assertEquals(['key' => 'val'], $data);
     }
 
+    #[Test]
     public function test_mixed_quotes_in_include_should_throw_syntax_error(): void
     {
         $this->expectException(ParserException::class);

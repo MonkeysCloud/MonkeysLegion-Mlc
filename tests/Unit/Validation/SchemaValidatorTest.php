@@ -2,13 +2,15 @@
 
 declare(strict_types=1);
 
-namespace MonkeysLegion\Mlc\Tests\Unit;
+namespace MonkeysLegion\Mlc\Tests\Unit\Validation;
 
 use PHPUnit\Framework\TestCase;
+use PHPUnit\Framework\Attributes\Test;
 use MonkeysLegion\Mlc\Validator\SchemaValidator;
 
 class SchemaValidatorTest extends TestCase
 {
+    #[Test]
     public function test_valid_configuration_should_return_no_errors(): void
     {
         $schema = [
@@ -35,6 +37,7 @@ class SchemaValidatorTest extends TestCase
         $this->assertEmpty($errors);
     }
 
+    #[Test]
     public function test_missing_required_field_should_return_error(): void
     {
         $schema = [
@@ -48,6 +51,7 @@ class SchemaValidatorTest extends TestCase
         $this->assertEquals("Required field 'host' is missing", $errors[0]);
     }
 
+    #[Test]
     public function test_type_validation_all_types(): void
     {
         $schema = [
@@ -98,6 +102,7 @@ class SchemaValidatorTest extends TestCase
         $this->assertStringContainsString("type 'null', got 'boolean'", $errors[6]);
     }
 
+    #[Test]
     public function test_enum_validation(): void
     {
         $schema = [
@@ -113,6 +118,7 @@ class SchemaValidatorTest extends TestCase
         $this->assertEquals("Field 'role' must be one of: admin, user, guest", $errors[0]);
     }
 
+    #[Test]
     public function test_min_max_validation(): void
     {
         $schema = [
@@ -135,6 +141,7 @@ class SchemaValidatorTest extends TestCase
         $this->assertEquals("Field 'port' must be <= 65535", $errors[0]);
     }
 
+    #[Test]
     public function test_pattern_validation(): void
     {
         $schema = [
@@ -150,6 +157,7 @@ class SchemaValidatorTest extends TestCase
         $this->assertEquals("Field 'version' does not match required pattern", $errors[0]);
     }
 
+    #[Test]
     public function test_custom_validator(): void
     {
         $schema = [
@@ -172,6 +180,7 @@ class SchemaValidatorTest extends TestCase
         $this->assertEquals("Value in custom is not expected.", $errors[0]);
     }
 
+    #[Test]
     public function test_strict_mode_rejects_unexpected_fields(): void
     {
         $schema = [
@@ -186,6 +195,7 @@ class SchemaValidatorTest extends TestCase
         $this->assertEquals("Unexpected field 'unexpected'", $errors[0]);
     }
 
+    #[Test]
     public function test_nested_validation_error_paths(): void
     {
         $schema = [
@@ -203,6 +213,7 @@ class SchemaValidatorTest extends TestCase
         $this->assertEquals("Required field 'db.host' is missing", $errors[0]);
     }
 
+    #[Test]
     public function test_non_array_rules_are_ignored(): void
     {
         $schema = [

@@ -9,6 +9,7 @@ use MonkeysLegion\Mlc\Exception\SecurityException;
 use MonkeysLegion\Mlc\Exception\CircularDependencyException;
 
 use JsonException;
+use MonkeysLegion\Env\Contracts\EnvBootstrapperInterface;
 use MonkeysLegion\Env\Contracts\EnvRepositoryInterface;
 use MonkeysLegion\Mlc\Parsers\Traits\FileSecurityTrait;
 use MonkeysLegion\Mlc\Contracts\ParserInterface;
@@ -57,11 +58,22 @@ final class MlcParser implements ParserInterface
      */
     private ?ParserInterface $delegate = null;
 
+    /**
+     * Environment repository to resolve environment variables.
+     */
+    private EnvRepositoryInterface $env;
+
     // ── Constructor ──────────────────────────────────────────────
 
     public function __construct(
-        private EnvRepositoryInterface $env,
-    ) {}
+        private EnvBootstrapperInterface $envBootstrapper,
+        string $root,
+    ) {
+        if (!$envBootstrapper->isBooted()) {
+            $envBootstrapper->boot($root);
+        }
+        $this->env = $envBootstrapper->getRepository();
+    }
 
     // ── Public API ──────────────────────────────────────────────
 

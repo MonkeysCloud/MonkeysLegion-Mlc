@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace MonkeysLegion\Mlc;
 
-use Dotenv\Dotenv;
-use Dotenv\Exception\InvalidPathException;
 use MonkeysLegion\Mlc\Exception\LoaderException;
 use MonkeysLegion\Mlc\Contracts\ConfigValidatorInterface;
 use MonkeysLegion\Mlc\Contracts\ParserInterface;
@@ -53,9 +51,7 @@ final class Loader implements LoaderInterface
     public function __construct(
         private ParserInterface $parser,
         private string $baseDir,
-        private ?string $envDir = null,
         private ?CacheInterface $cache = null,
-        private bool $autoLoadEnv = true,
         bool $strictSecurity = false,
     ) {
         if ($strictSecurity) {
@@ -73,11 +69,6 @@ final class Loader implements LoaderInterface
             throw new LoaderException(
                 "Config directory not readable: {$this->baseDir}",
             );
-        }
-
-        // Auto-load environment if enabled
-        if ($this->autoLoadEnv) {
-            $this->loadEnvironment();
         }
     }
 
@@ -265,104 +256,6 @@ final class Loader implements LoaderInterface
                 $e,
             );
         }
-    }
-
-    // ── Environment ───────────────────────────────────────────
-
-    /**
-     * Load environment files.
-     *
-     * Loads in order:
-     * - .env
-     * - .env.local
-     * - .env.{APP_ENV}
-     * - .env.{APP_ENV}.local
-     *
-     * @return void
-     */
-    private function loadEnvironment(): void
-    {
-        if ($this->envLoaded) {
-            return;
-        }
-
-        $dir = $this->envDir ?? $this->baseDir;
-
-        if (!is_dir($dir)) {
-            $this->envLoaded = true;
-            return;
-        }
-
-        // 1. Resolve APP_ENV (checked in this order: Server/Env vars -> .env.local -> .env)
-        $appEnv = $this->resolveAppEnv($dir);
-
-        // 2. Build priority list (Most specific first -> Least specific last)
-        $candidates = [];
-
-        if ($appEnv !== null) {
-            $candidates[] = ".env.{$appEnv}.local";
-            $candidates[] = ".env.{$appEnv}";
-        }
-
-        $candidates[] = '.env.local';
-        $candidates[] = '.env';
-
-        // 3. Filter for existing files
-        $filesToLoad = [];
-        foreach ($candidates as $file) {
-            if (file_exists($dir . '/' . $file)) {
-                $filesToLoad[] = $file;
-            }
-        }
-
-        // 4. Load valid files (Immutability ensures first loaded value wins)
-        if (!empty($filesToLoad)) {
-            try {
-                // We use load() because we've already vetted file existence
-                Dotenv::createImmutable($dir, $filesToLoad)->load();
-            } catch (InvalidPathException $e) {
-                // Should not happen since we checked file_exists, but safe fallback
-            }
-        }
-
-        $this->envLoaded = true;
-    }
-
-    /**
-     * Resolve APP_ENV without fully loading .env files.
-     */
-    private function resolveAppEnv(string $dir): ?string
-    {
-        // 1. Check existing environment
-        if (isset($_SERVER['APP_ENV'])) {
-            return (string)$_SERVER['APP_ENV'];
-        }
-        if (isset($_ENV['APP_ENV'])) {
-            return (string)$_ENV['APP_ENV'];
-        }
-
-        // 2. Peek into .env.local and .env
-        $filesToCheck = ['.env.local', '.env'];
-
-        foreach ($filesToCheck as $file) {
-            $path = $dir . '/' . $file;
-            if (!file_exists($path)) {
-                continue;
-            }
-
-            $content = file_get_contents($path);
-            if ($content === false) {
-                continue;
-            }
-
-            // Simple regex to find APP_ENV=value
-            // Supports: APP_ENV=dev, APP_ENV="dev", APP_ENV='dev'
-            if (preg_match('/^\s*APP_ENV=(?:["\']?)([^"\'].+?)(?:["\']?)\s*$/m', $content, $matches)) {
-                return trim($matches[1]);
-            }
-        }
-
-        return null;
     }
 
     // ── Internals ──────────────────────────────────────────────

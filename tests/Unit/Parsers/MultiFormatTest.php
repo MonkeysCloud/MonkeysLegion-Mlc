@@ -2,9 +2,10 @@
 
 declare(strict_types=1);
 
-namespace MonkeysLegion\Mlc\Tests\Unit;
+namespace MonkeysLegion\Mlc\Tests\Unit\Parsers;
 
 use PHPUnit\Framework\TestCase;
+use PHPUnit\Framework\Attributes\Test;
 use MonkeysLegion\Mlc\Loader;
 use MonkeysLegion\Mlc\Parsers\MlcParser;
 use MonkeysLegion\Mlc\Parsers\JsonParser;
@@ -12,6 +13,8 @@ use MonkeysLegion\Mlc\Parsers\YamlParser;
 use MonkeysLegion\Mlc\Parsers\PhpParser;
 use MonkeysLegion\Mlc\Parsers\CompositeParser;
 use MonkeysLegion\Env\Repositories\NativeEnvRepository;
+use MonkeysLegion\Env\EnvManager;
+use MonkeysLegion\Env\Loaders\DotenvLoader;
 
 class MultiFormatTest extends TestCase
 {
@@ -39,6 +42,7 @@ class MultiFormatTest extends TestCase
         }
     }
 
+    #[Test]
     public function test_should_be_able_to_load_multiple_formats(): void
     {
         // 1. Prepare files
@@ -48,12 +52,16 @@ class MultiFormatTest extends TestCase
         file_put_contents($this->tempDir . '/main.mlc', "main_key = \"val\"");
 
         // 2. Set up Composite Parser
-        $mlcParser = new MlcParser(new NativeEnvRepository());
-        $composite = new CompositeParser($mlcParser);
+        $repository = new NativeEnvRepository();
+        $bootstrapper = new EnvManager(new DotenvLoader(), $repository);
+        $root = $this->tempDir;
+
+        $mlc = new MlcParser($bootstrapper, $root);
+        $composite = new CompositeParser($mlc);
         $composite->registerParser('json', new JsonParser());
         $composite->registerParser('yaml', new YamlParser());
         $composite->registerParser('yml', new YamlParser());
-        $composite->registerParser('php', new PhpParser());
+        $composite->registerParser('php', new PhpParser($bootstrapper, $root));
 
         // 3. Initialize Loader
         $loader = new Loader($composite, $this->tempDir);
@@ -68,6 +76,7 @@ class MultiFormatTest extends TestCase
         $this->assertEquals('val', $config->get('main_key'));
     }
 
+    #[Test]
     public function test_should_be_able_to_include_json_inside_mlc(): void
     {
         // 1. Prepare MLC with @include for JSON
@@ -78,7 +87,11 @@ class MultiFormatTest extends TestCase
         MLC);
 
         // 2. Set up Composite Parser
-        $mlcParser = new MlcParser(new NativeEnvRepository());
+        $repository = new NativeEnvRepository();
+        $bootstrapper = new EnvManager(new DotenvLoader(), $repository);
+        $root = $this->tempDir;
+
+        $mlcParser = new MlcParser($bootstrapper, $root);
         $composite = new CompositeParser($mlcParser);
         $composite->registerParser('json', new JsonParser());
 

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace MonkeysLegion\Mlc\Parsers;
 
+use MonkeysLegion\Env\Contracts\EnvBootstrapperInterface;
+use MonkeysLegion\Env\Contracts\EnvRepositoryInterface;
 use MonkeysLegion\Mlc\Parsers\Traits\FileSecurityTrait;
 use MonkeysLegion\Mlc\Contracts\ParserInterface;
 use MonkeysLegion\Mlc\Exception\ParserException;
@@ -14,7 +16,28 @@ use MonkeysLegion\Mlc\Exception\SecurityException;
  */
 final class PhpParser implements ParserInterface
 {
+    // ── Configuration ──────────────────────────────────────────
+    
     use FileSecurityTrait;
+
+    // ── State ──────────────────────────────────────────────────
+    
+    /**
+     * Environment repository to resolve environment variables.
+     */
+    private EnvRepositoryInterface $env;
+
+    // ── Constructor ──────────────────────────────────────────────
+
+    public function __construct(
+        private EnvBootstrapperInterface $envBootstrapper,
+        string $root,
+    ) {
+        if (!$envBootstrapper->isBooted()) {
+            $envBootstrapper->boot($root);
+        }
+        $this->env = $envBootstrapper->getRepository();
+    }
 
     public function parseFile(string $file): array
     {

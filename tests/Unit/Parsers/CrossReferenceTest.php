@@ -2,10 +2,13 @@
 
 declare(strict_types=1);
 
-namespace MonkeysLegion\Mlc\Tests\Unit;
+namespace MonkeysLegion\Mlc\Tests\Unit\Parsers;
 
 use MonkeysLegion\Env\Repositories\NativeEnvRepository;
+use MonkeysLegion\Env\EnvManager;
+use MonkeysLegion\Env\Loaders\DotenvLoader;
 use PHPUnit\Framework\TestCase;
+use PHPUnit\Framework\Attributes\Test;
 use MonkeysLegion\Mlc\Parsers\MlcParser;
 use MonkeysLegion\Mlc\Exception\CircularDependencyException;
 
@@ -15,9 +18,12 @@ class CrossReferenceTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->parser = new MlcParser(new NativeEnvRepository());
+        $repository = new NativeEnvRepository();
+        $bootstrapper = new EnvManager(new DotenvLoader(), $repository);
+        $this->parser = new MlcParser($bootstrapper, sys_get_temp_dir());
     }
 
+    #[Test]
     public function test_simple_cross_key_reference_should_work(): void
     {
         $content = <<<MLC
@@ -30,6 +36,7 @@ class CrossReferenceTest extends TestCase
         $this->assertEquals('https://example.com/v1', $data['api_v1']);
     }
 
+    #[Test]
     public function test_circular_reference_should_throw_exception(): void
     {
         $this->expectException(CircularDependencyException::class);
@@ -45,6 +52,7 @@ class CrossReferenceTest extends TestCase
         $this->parser->parseContent($content);
     }
 
+    #[Test]
     public function test_clean_reference_should_not_throw_exception(): void
     {
         $content = <<<MLC

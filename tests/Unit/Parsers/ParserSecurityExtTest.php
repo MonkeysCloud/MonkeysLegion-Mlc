@@ -2,9 +2,10 @@
 
 declare(strict_types=1);
 
-namespace MonkeysLegion\Mlc\Tests\Unit;
+namespace MonkeysLegion\Mlc\Tests\Unit\Parsers;
 
 use PHPUnit\Framework\TestCase;
+use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\Attributes\DataProvider;
 use MonkeysLegion\Mlc\Parsers\MlcParser;
 use MonkeysLegion\Mlc\Parsers\JsonParser;
@@ -12,6 +13,8 @@ use MonkeysLegion\Mlc\Parsers\YamlParser;
 use MonkeysLegion\Mlc\Parsers\PhpParser;
 use MonkeysLegion\Mlc\Parsers\CompositeParser;
 use MonkeysLegion\Env\Repositories\NativeEnvRepository;
+use MonkeysLegion\Env\EnvManager;
+use MonkeysLegion\Env\Loaders\DotenvLoader;
 use MonkeysLegion\Mlc\Exception\SecurityException;
 use MonkeysLegion\Mlc\Exception\ParserException;
 
@@ -33,9 +36,11 @@ class ParserSecurityExtTest extends TestCase
     private function removeDirectory(string $path): void
     {
         if (is_dir($path)) {
-            $files = glob($path . '/*');
+            $files = glob($path . '/{,.}*', GLOB_BRACE);
             foreach ($files as $file) {
-                is_dir($file) ? $this->removeDirectory($file) : unlink($file);
+                if (basename($file) !== '.' && basename($file) !== '..') {
+                    is_dir($file) ? $this->removeDirectory($file) : unlink($file);
+                }
             }
             rmdir($path);
         }
@@ -43,16 +48,25 @@ class ParserSecurityExtTest extends TestCase
 
     public static function parserProvider(): array
     {
-        $env = new NativeEnvRepository();
+        $repository = new NativeEnvRepository();
+        $bootstrapper = new EnvManager(new DotenvLoader(), $repository);
+        $root = sys_get_temp_dir();
+
+        $mlc = new MlcParser($bootstrapper, $root);
+        $json = new JsonParser();
+        $yaml = new YamlParser();
+        $php = new PhpParser($bootstrapper, $root);
+
         return [
-            'MLC Parser'  => [new MlcParser($env)],
-            'JSON Parser' => [new JsonParser()],
-            'YAML Parser' => [new YamlParser()],
-            'PHP Parser'  => [new PhpParser()],
+            'MLC Parser'  => [$mlc],
+            'JSON Parser' => [$json],
+            'YAML Parser' => [$yaml],
+            'PHP Parser'  => [$php],
         ];
     }
 
     #[DataProvider('parserProvider')]
+    #[Test]
     public function test_should_throw_on_non_existent_file($parser): void
     {
         $this->expectException(SecurityException::class);
@@ -60,14 +74,15 @@ class ParserSecurityExtTest extends TestCase
     }
 
     #[DataProvider('parserProvider')]
+    #[Test]
     public function test_should_throw_on_path_traversal($parser): void
     {
-        // Actually, this matches another test, but let's keep it.
         $this->expectException(SecurityException::class);
         $parser->parseFile($this->tempDir . '/../etc/passwd');
     }
 
     #[DataProvider('parserProvider')]
+    #[Test]
     public function test_should_throw_on_world_writable_file_in_strict_mode($parser): void
     {
         $file = $this->tempDir . '/writable.txt';
@@ -79,6 +94,7 @@ class ParserSecurityExtTest extends TestCase
     }
 
     #[DataProvider('parserProvider')]
+    #[Test]
     public function test_security_trait_edge_cases($parser): void
     {
         $content = match (true) {
@@ -111,26 +127,41 @@ class ParserSecurityExtTest extends TestCase
         $this->assertTrue(true);
     }
 
+    #[Test]
     public function test_php_parser_coverage(): void
     {
-        $parser = new PhpParser();
+        $repository = new NativeEnvRepository();
+        $bootstrapper = new EnvManager(new DotenvLoader(), $repository);
+        $parser = new PhpParser($bootstrapper, sys_get_temp_dir());
         
         // invalid return
         $file = $this->tempDir . '/bad.php';
         file_put_contents($file, "<?php return 'bad';");
         $this->assertEquals([], $parser->parseFile($file));
         
-        // parseContent throws
+        // re-throw case (broken PHP)
+        $fileFail = $this->tempDir . '/fail_throw.php';
+        file_put_contents($fileFail, "<?php throw new \Exception('PHP Error');");
+        try {
+            $parser->parseFile($fileFail);
+            $this->fail("Should have thrown ParserException");
+        } catch (ParserException $e) {
+            $this->assertStringContainsString("Failed to load PHP config", $e->getMessage());
+        }
+
+        // parseContent throws (not supported in PhpParser)
         try {
             $parser->parseContent("...");
+            $this->fail("Should have thrown");
         } catch (ParserException $e) {
             $this->assertStringContainsString("not supported", $e->getMessage());
         }
-        
+
         // getParsedFiles
         $this->assertEquals([], $parser->getParsedFiles());
     }
 
+    #[Test]
     public function test_json_parser_coverage(): void
     {
         $parser = new JsonParser();
@@ -141,6 +172,7 @@ class ParserSecurityExtTest extends TestCase
         $this->assertEquals([], $parser->getParsedFiles());
     }
 
+    #[Test]
     public function test_yaml_parser_coverage(): void
     {
         $parser = new YamlParser();
@@ -149,9 +181,14 @@ class ParserSecurityExtTest extends TestCase
         $this->assertEquals([], $parser->getParsedFiles());
     }
 
-    public function test_composite_parser_coverage(): void
+    #[Test]
+    public function test_composite_parser_interoperability(): void
     {
-        $mlc = new MlcParser(new NativeEnvRepository());
+        $repository = new NativeEnvRepository();
+        $bootstrapper = new EnvManager(new DotenvLoader(), $repository);
+        $root = sys_get_temp_dir();
+
+        $mlc = new MlcParser($bootstrapper, $root);
         $composite = new CompositeParser($mlc);
         $composite->registerParser('json', new JsonParser());
         $composite->registerParser('.yaml', new YamlParser());
@@ -170,6 +207,6 @@ class ParserSecurityExtTest extends TestCase
         // Edge: non-mlc default
         $json = new JsonParser();
         $c2 = new CompositeParser($json);
-        $c2->registerParser('mlc', new MlcParser(new NativeEnvRepository()));
+        $c2->registerParser('mlc', new MlcParser($bootstrapper, $root));
     }
 }

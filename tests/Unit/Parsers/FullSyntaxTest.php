@@ -2,10 +2,13 @@
 
 declare(strict_types=1);
 
-namespace MonkeysLegion\Mlc\Tests\Unit;
+namespace MonkeysLegion\Mlc\Tests\Unit\Parsers;
 
 use MonkeysLegion\Env\Repositories\NativeEnvRepository;
+use MonkeysLegion\Env\EnvManager;
+use MonkeysLegion\Env\Loaders\DotenvLoader;
 use PHPUnit\Framework\TestCase;
+use PHPUnit\Framework\Attributes\Test;
 use MonkeysLegion\Mlc\Parsers\MlcParser;
 use MonkeysLegion\Mlc\Config;
 
@@ -15,7 +18,9 @@ class FullSyntaxTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->parser = new MlcParser(new NativeEnvRepository());
+        $repository = new NativeEnvRepository();
+        $bootstrapper = new EnvManager(new DotenvLoader(), $repository);
+        $this->parser = new MlcParser($bootstrapper, sys_get_temp_dir());
     }
 
     private function getComprehensiveContent(): string
@@ -73,6 +78,7 @@ class FullSyntaxTest extends TestCase
         MLC;
     }
 
+    #[Test]
     public function test_comprehensive_syntax_and_types_should_parse_correctly(): void
     {
         $content = $this->getComprehensiveContent();
@@ -121,6 +127,7 @@ class FullSyntaxTest extends TestCase
         $this->assertTrue($data['boolean_ref']);
     }
 
+    #[Test]
     public function test_comprehensive_syntax_via_config_dot_notation(): void
     {
         $content = $this->getComprehensiveContent();

@@ -2,10 +2,13 @@
 
 declare(strict_types=1);
 
-namespace MonkeysLegion\Mlc\Tests\Unit;
+namespace MonkeysLegion\Mlc\Tests\Unit\Parsers;
 
 use MonkeysLegion\Env\Repositories\NativeEnvRepository;
+use MonkeysLegion\Env\EnvManager;
+use MonkeysLegion\Env\Loaders\DotenvLoader;
 use PHPUnit\Framework\TestCase;
+use PHPUnit\Framework\Attributes\Test;
 use MonkeysLegion\Mlc\Parsers\MlcParser;
 use MonkeysLegion\Mlc\Exception\ParserException;
 
@@ -17,7 +20,8 @@ class EnvExpansionTest extends TestCase
     protected function setUp(): void
     {
         $this->env = new NativeEnvRepository();
-        $this->parser = new MlcParser($this->env);
+        $bootstrapper = new EnvManager(new DotenvLoader(), $this->env);
+        $this->parser = new MlcParser($bootstrapper, sys_get_temp_dir());
     }
 
     protected function tearDown(): void
@@ -33,6 +37,7 @@ class EnvExpansionTest extends TestCase
         }
     }
 
+    #[Test]
     public function test_standalone_expansion_should_work(): void
     {
         $this->env->set('MLC_TEST_VAR', 'hello_world');
@@ -43,6 +48,7 @@ class EnvExpansionTest extends TestCase
         $this->assertEquals('hello_world', $data['key']);
     }
 
+    #[Test]
     public function test_standalone_expansion_with_default_should_work(): void
     {
         // ML_NOT_SET is not in env
@@ -52,6 +58,7 @@ class EnvExpansionTest extends TestCase
         $this->assertEquals('default_value', $data['key']);
     }
 
+    #[Test]
     public function test_expansion_type_casting_should_work(): void
     {
         $this->env->set('MLC_TEST_BOOL_TRUE', 'true');
@@ -71,6 +78,7 @@ class EnvExpansionTest extends TestCase
         $this->assertNull($data['nothing']);
     }
 
+    #[Test]
     public function test_inline_expansion_should_work(): void
     {
         $this->env->set('MLC_TEST_HOST', 'localhost');
@@ -82,6 +90,7 @@ class EnvExpansionTest extends TestCase
         $this->assertEquals('http://localhost:8080/v1', $data['api_url']);
     }
 
+    #[Test]
     public function test_inline_expansion_with_default_should_work(): void
     {
         $this->env->set('MLC_TEST_HOST', 'example.com');
@@ -92,6 +101,7 @@ class EnvExpansionTest extends TestCase
         $this->assertEquals('http://example.com:9000/api', $data['api_url']);
     }
 
+    #[Test]
     public function test_nested_inline_expansion_should_work(): void
     {
         $this->env->set('ENV_A', 'foo');
@@ -103,6 +113,7 @@ class EnvExpansionTest extends TestCase
         $this->assertEquals('foo-bar', $data['combined']);
     }
 
+    #[Test]
     public function test_unquoted_inline_expansion_should_work(): void
     {
         $this->env->set('ENV_PART', 'world');
@@ -112,6 +123,7 @@ class EnvExpansionTest extends TestCase
         $this->assertEquals('hello-world', $data['greeting']);
     }
 
+    #[Test]
     public function test_recursive_expansion_should_be_handled(): void
     {
         // env() returns true/false literals that are then parsed by Parser.
@@ -123,6 +135,7 @@ class EnvExpansionTest extends TestCase
         $this->assertTrue($data['val']);
     }
 
+    #[Test]
     public function test_edge_case_casting_should_work(): void
     {
         $this->env->set('MLC_TEST_TRUE_PAREN', 'true');
@@ -145,6 +158,7 @@ class EnvExpansionTest extends TestCase
         $this->assertTrue(empty($data['d']));
     }
 
+    #[Test]
     public function test_env_source_priority_should_work(): void
     {
         $_ENV['SOURCE_TEST'] = 'env_value';
