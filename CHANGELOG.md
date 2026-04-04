@@ -3,7 +3,53 @@
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+and this project adheres to [SemVer](https://semver.org/spec/v2.0.0.html).
+
+## [3.0.0] - 2026-04-04
+
+### Added - Performance & Architecture (The "OPcache" Update)
+
+#### Zero-Overhead Production Mode
+- `CompiledPhpCache`: A new PSR-16 cache implementation that compiles MLC to static PHP arrays.
+- Automatic OPcache optimization: Configuration is stored in shared memory for instant access.
+- `Loader::compile()`: Tooling for deployment pipelines to pre-warm the configuration cache.
+
+#### Dual-Layer Data Engine
+- Non-destructive runtime overrides: `Config::override()` allows modifying values without touching the compiled base.
+- Atomic snapshots: `Config::snapshot()` flattens the base and overrides into a fresh, isolated instance.
+- Fine-grained locking: `lock()` and `lockOverrides()` to prevent unexpected mutations in long-running processes.
+
+#### Recursive Includes & References
+- `@include` support: Split configuration into manageable files with logic for circular include protection.
+- Cross-key references: Use `${key}` syntax to reference values in the same file or across includes.
+- Native environment expansion: Decoupled `${VAR:-default}` syntax powered by `monkeyslegion-env`.
+- Circular dependency detection: Robust tracking for both file inclusions and cross-key references.
+
+#### Multi-Format & Tooling
+- `CompositeParser`: Native support for loading `.json`, `.yaml`, and `.php` (array) files alongside `.mlc`.
+- `mlc-check` CLI utility: Standalone binary for validating configuration syntax, security, and integrity.
+- Component decoupling: Full interface-based architecture for `Parser`, `Loader`, and `Cache`.
+
+#### Extensibility & Type Safety
+- **Lifecycle Hooks**: `onLoading`, `onLoaded`, and `onValidationError` events in the `Loader`.
+- Type-safe registration: Dedicated `LoaderHook` enum and proxy methods (`onLoading()`, etc.) for IDE support.
+- PHP 8.4 compatibility: Full adoption of property hooks, asymmetric visibility, and modern typing standards.
+
+### Fixed & Hardened
+
+- **Security Auditing**: Strict mode for world-writable file checks (upgraded from warnings to exceptions).
+- **Environment Isolation**: Moved all environment resolution to the dedicated `monkeyslegion-env` package.
+- **Resource Management**: Fixed directory cleanup in test suites and memory leaks in recursive parsing.
+- **Error Reporting**: Improved clarity of syntax errors and validation failure messages.
+
+### Breaking Changes (Important)
+
+- **Constructor Signatures**: `Loader`, `MlcParser`, and `PhpParser` constructors have been refactored for strict dependency injection.
+- **Environment Loading**: `autoLoadEnv` and `envDir` removed from `Loader`; environment management is now handled by the injected parser's bootstrapper.
+- **Immutable by Default**: The `Config` object is now more strictly immutable; use `override()` or `snapshot()` for mutable scenarios.
+- **Dependency Migration**: Removed `vlucas/phpdotenv` as a direct dependency; replaced by `MonkeysLegion\Env`.
+
+---
 
 ## [2.0.0] - 2025-12-14
 

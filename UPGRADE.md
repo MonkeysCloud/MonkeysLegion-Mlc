@@ -1,389 +1,102 @@
-# Upgrade Guide: 1.x to 2.x
+# Upgrading to MonkeysLegion MLC v3.0.0
 
-## Good News!
+MLC v3 is a major architectural update focusing on **zero-overhead performance**, **deep environment integration**, and **strict type safety**. This guide outlines the breaking changes and the necessary steps to upgrade from v2.x.
 
-**The MLC 2.x package is 100% backwards compatible with 1.x.** Your existing code will continue to work without any changes. This upgrade guide shows you how to take advantage of new features.
+---
 
-## What's New in 2.x?
+## 🚀 1. Constructor Signature Changes (High Impact)
 
-- ✅ Caching support for better performance
-- ✅ Schema validation
-- ✅ Type-safe getters
-- ✅ Configuration freezing
-- ✅ Security enhancements
-- ✅ Better error messages
-- ✅ Hot-reload detection
+To comply with the new decoupled architecture, constructors for `Loader`, `MlcParser`, and `PhpParser` have been significiantly changed.
 
-## Zero-Change Upgrade
+### Loader
+The `Loader` now strictly requires a `ParserInterface` implementation and does not handle environment loading itself.
 
-Simply update your `composer.json`:
-
-```json
-{
-    "require": {
-        "monkeyscloud/monkeyslegion-mlc": "^2.0"
-    }
-}
-```
-
-Then run:
-
-```bash
-composer update monkeyscloud/monkeyslegion-mlc
-```
-
-Your code continues to work exactly as before!
-
-## Recommended Enhancements
-
-While not required, we recommend adopting these new features for better performance and safety:
-
-### 1. Add Caching (Recommended for Production)
-
-**Before:**
+**Before (v2.x):**
 ```php
-$loader = new Loader(new Parser(), '/path/to/config');
-$config = $loader->load(['app', 'database']);
+$loader = new Loader(new Parser(), $baseDir, $envDir, $cache, $autoLoadEnv);
 ```
 
-**After:**
+**After (v3.0):**
 ```php
-use MonkeysLegion\Cache\CacheManager;
-
-// Setup cache manager
-$cacheConfig = [
-    'default' => 'file',
-    'stores' => [
-        'file' => [
-            'driver' => 'file',
-            'path' => '/var/cache/mlc',
-            'prefix' => 'mlc_',
-        ],
-    ],
-];
-
-$cacheManager = new CacheManager($cacheConfig);
-$cache = $cacheManager->store('file');
-
-$loader = new Loader(new Parser(), '/path/to/config', cache: $cache);
-$config = $loader->load(['app', 'database']);
+// Standard MLC usage
+$loader = new Loader(new MlcParser($bootstrapper, $root), $baseDir, cache: $cache);
 ```
 
-**With Redis (Production):**
+### MLC/PHP Parsers
+Parsers now require an `EnvBootstrapperInterface` and the project root directory to handle environment resolution and file security correctly.
+
+**After (v3.0):**
 ```php
-$cacheConfig = [
-    'default' => 'redis',
-    'stores' => [
-        'redis' => [
-            'driver' => 'redis',
-            'host' => '127.0.0.1',
-            'port' => 6379,
-            'database' => 1,
-            'prefix' => 'mlc_',
-        ],
-    ],
-];
+use MonkeysLegion\Env\EnvManager;
+use MonkeysLegion\Env\Loaders\DotenvLoader;
+use MonkeysLegion\Env\Repositories\NativeEnvRepository;
 
-$cacheManager = new CacheManager($cacheConfig);
-$cache = $cacheManager->store('redis');
-
-$loader = new Loader(new Parser(), '/path/to/config', cache: $cache);
+$bootstrapper = new EnvManager(new DotenvLoader(), new NativeEnvRepository());
+$parser = new MlcParser($bootstrapper, $rootPath);
 ```
+***Note: The Parser class has been renamed to MlcParser and both MlcParser ad PhpParser requires an EnvBootstrapperInterface implementation the YamlParser and JsonParser does not.***
 
-**Benefits:**
-- 10-20x faster config loading
-- Multiple cache drivers (File, Redis, Memcached, Array)
-- PSR-16 compliant
-- Cache tagging support
-- Atomic operations
-- Production-tested reliability
+---
 
-### 2. Use Type-Safe Getters
+## 🌍 2. Environment Management (High Impact)
 
-**Before:**
+MLC no longer bundles `vlucas/phpdotenv`. All environment resolution is now handled by the **MonkeysLegion-Env** package.
+
+- **Removed**: `autoLoadEnv` and `envDir` parameters from `Loader`.
+- **New**: Inject an `EnvBootstrapperInterface` into your parser. This allows you to decouple how `.env` files are loaded (or use existing global environment variables).
+
+---
+
+## 🧠 3. Config Immutability & Overrides (Medium Impact)
+
+The original `set()` method and related mutation behaviors are deprecated in favor of a **Dual-Layer Engine**.
+
+- **Locked Base**: By default, the compiled base of a `Config` instance is immutable.
+- **Runtime Overrides**: Use `override(path, value)` to apply non-destructive runtime changes.
+- **Snapshots**: Use `snapshot()` to get a fresh, isolated `Config` instance containing all current overrides.
+
+**Before (v2.x):**
 ```php
-$port = $config->get('database.port', 3306);
-$debug = $config->get('app.debug', false);
+$config->set('app.debug', true); // Mutates current instance
 ```
 
-**After:**
+**After (v3.0):**
 ```php
-$port = $config->getInt('database.port', 3306);
-$debug = $config->getBool('app.debug', false);
+$config->override('app.debug', true); // Non-destructive override on top of base
+$isolatedSnap = $config->snapshot(); // Isolated copy, overrides baked into base
 ```
 
-**Benefits:**
-- IDE autocomplete
-- Type errors caught early
-- Self-documenting code
+---
 
-### 3. Freeze Configuration in Production
+## 🔒 4. Strict Security Mode (Medium Impact)
 
-**Before:**
+Security warnings regarding world-writable files in production have been upgraded to formal exceptions in strict mode.
+
+- **Check**: Audit your configuration file permissions.
+- **Upgrade**: Use `strictSecurity: true` in the `Loader` constructor to prevent booting if insecure files are detected.
+
+---
+
+## 🪝 5. Event Hooks (Low Impact)
+
+If you were manually wrapping the `Loader` to track activity, you can now use the native hook system.
+
+**After (v3.0):**
 ```php
-$config = $loader->load(['app']);
-// Config can be modified anywhere
+$loader->onLoading(fn($names) => log("Loading: " . implode(',', $names)));
+$loader->onLoaded(fn($config) => log("Config fully loaded"));
 ```
 
-**After:**
-```php
-$loader->setAutoFreeze(true);
-$config = $loader->load(['app']);
-// Config is immutable, prevents accidental modifications
-```
+---
 
-**Benefits:**
-- Prevents bugs from accidental config changes
-- Thread-safe guarantee
-- Clear immutability contract
+## 🛠️ Summary of Deprecations & Removals
 
-### 4. Add Validation (Recommended for Production)
+- `vlucas/phpdotenv` dependency removed.
+- `Loader->__construct` parameters `$envDir` and `$autoLoadEnv` removed.
+- `Parser` (concrete class) renamed to `MlcParser`.
+- Use `MlcParser` instead of generic `Parser` for native format.
+- Use `CompositeParser` for multi-format (`.json`, `.yaml`) loading.
 
-**Before:**
-```php
-$config = $loader->load(['app']);
-// Hope everything is correct
-```
+---
 
-**After:**
-```php
-use MonkeysLegion\Mlc\Validator\SchemaValidator;
-
-$schema = [
-    'app' => [
-        'type' => 'array',
-        'required' => true,
-        'children' => [
-            'name' => ['type' => 'string', 'required' => true],
-            'debug' => ['type' => 'bool', 'required' => true],
-        ],
-    ],
-];
-
-$validator = new SchemaValidator($schema);
-$loader->setValidator($validator);
-$config = $loader->load(['app']); // Throws if invalid
-```
-
-**Benefits:**
-- Catch configuration errors at startup
-- Document required configuration
-- Prevent invalid configs in production
-
-### 5. Update Error Handling
-
-**Before:**
-```php
-try {
-    $config = $loader->load(['app']);
-} catch (RuntimeException $e) {
-    // Generic error
-}
-```
-
-**After:**
-```php
-use MonkeysLegion\Mlc\Exception\ParserException;
-use MonkeysLegion\Mlc\Exception\LoaderException;
-use MonkeysLegion\Mlc\Exception\SecurityException;
-
-try {
-    $config = $loader->load(['app']);
-} catch (ParserException $e) {
-    // Parse error with file and line number
-    error_log("Parse error in {$e->getFile()} at line {$e->getLine()}: {$e->getMessage()}");
-} catch (SecurityException $e) {
-    // Security issue
-    error_log("Security error: {$e->getMessage()}");
-} catch (LoaderException $e) {
-    // Other loading error
-    error_log("Config loading error: {$e->getMessage()}");
-}
-```
-
-**Benefits:**
-- Better error messages
-- Specific error types
-- File and line information
-
-## Complete Production Setup Example
-
-Here's a complete example showing best practices for production:
-
-```php
-<?php
-
-use MonkeysLegion\Cache\CacheManager;
-use MonkeysLegion\Mlc\Loader;
-use MonkeysLegion\Mlc\Parser;
-use MonkeysLegion\Mlc\Validator\SchemaValidator;
-
-$isProduction = ($_ENV['APP_ENV'] ?? 'dev') === 'production';
-
-// Setup cache
-$cacheConfig = [
-    'default' => $isProduction ? 'redis' : 'array',
-    'stores' => [
-        'redis' => [
-            'driver' => 'redis',
-            'host' => $_ENV['REDIS_HOST'] ?? '127.0.0.1',
-            'port' => (int)($_ENV['REDIS_PORT'] ?? 6379),
-            'database' => 1,
-            'prefix' => 'mlc_',
-        ],
-        'file' => [
-            'driver' => 'file',
-            'path' => '/var/cache/mlc',
-            'prefix' => 'mlc_',
-        ],
-        'array' => [
-            'driver' => 'array',
-            'prefix' => 'mlc_dev_',
-        ],
-    ],
-];
-
-$cacheManager = new CacheManager($cacheConfig);
-$cache = $isProduction 
-    ? $cacheManager->store('redis')  // Use Redis in production
-    : $cacheManager->store('array'); // Use in-memory in development
-
-// Create loader
-$loader = new Loader(
-    parser: new Parser(),
-    baseDir: __DIR__ . '/config',
-    cache: $cache
-);
-
-// Add validation in production
-if ($isProduction) {
-    $validator = new SchemaValidator($schema); // Define your schema
-    $loader->setValidator($validator);
-    $loader->setAutoFreeze(true);
-}
-
-// Load configuration
-try {
-    $config = $loader->load(['app', 'database', 'cache']);
-    
-    // Use type-safe getters
-    $appName = $config->getString('app.name');
-    $dbPort = $config->getInt('database.port', 3306);
-    $debug = $config->getBool('app.debug', false);
-    
-} catch (\MonkeysLegion\Mlc\Exception\MlcException $e) {
-    // Handle configuration errors
-    error_log("Configuration error: {$e->getMessage()}");
-    exit(1);
-}
-```
-
-## Development vs Production Configuration
-
-### Development
-```php
-use MonkeysLegion\Cache\CacheManager;
-
-$cacheConfig = [
-    'default' => 'array',
-    'stores' => [
-        'array' => ['driver' => 'array', 'prefix' => 'mlc_dev_'],
-    ],
-];
-
-$cache = (new CacheManager($cacheConfig))->store('array');
-
-$loader = new Loader(
-    new Parser(),
-    __DIR__ . '/config',
-    cache: $cache, // Array cache for hot reload
-    autoLoadEnv: true
-);
-
-// Don't freeze for easier debugging
-$config = $loader->load(['app']);
-```
-
-### Production
-```php
-use MonkeysLegion\Cache\CacheManager;
-
-$cacheConfig = [
-    'default' => 'redis',
-    'stores' => [
-        'redis' => [
-            'driver' => 'redis',
-            'host' => $_ENV['REDIS_HOST'] ?? '127.0.0.1',
-            'port' => (int)($_ENV['REDIS_PORT'] ?? 6379),
-            'database' => 1,
-            'prefix' => 'mlc_prod_',
-        ],
-    ],
-];
-
-$cache = (new CacheManager($cacheConfig))->store('redis');
-
-$loader = new Loader(
-    new Parser(),
-    '/app/config',
-    cache: $cache,
-    autoLoadEnv: true
-);
-
-$loader->setValidator($validator);
-$loader->setAutoFreeze(true);
-
-$config = $loader->load(['app', 'database', 'cache']);
-```
-
-## Performance Comparison
-
-With caching enabled in production:
-
-```
-First load (parsing files):     5.2ms
-Subsequent loads (from cache):  0.4ms  (13x faster)
-Memory usage:                   ~50KB per config
-
-Without caching:
-Every load:                     5.2ms
-```
-
-## Breaking Changes
-
-**None!** Everything from 1.x works in 2.x.
-
-## Deprecated Features
-
-**None!** All 1.x features are still supported.
-
-## New Dependencies
-
-The only new requirement is PHP 8.4+. All other dependencies are optional (dev dependencies for testing/analysis).
-
-## Migration Checklist
-
-- [ ] Update composer dependency to `^2.0`
-- [ ] Run `composer update`
-- [ ] Test your application
-- [ ] Consider adding caching in production
-- [ ] Consider using type-safe getters
-- [ ] Consider adding validation
-- [ ] Consider freezing config in production
-- [ ] Update error handling to use specific exception types
-- [ ] Enjoy better performance and safety!
-
-## Questions?
-
-- Check the [README](README.md) for complete documentation
-- Open an issue on GitHub for questions
-
-## Rollback
-
-If you need to rollback:
-
-```bash
-composer require monkeyscloud/monkeyslegion-mlc:^1.0
-```
-
-Your code will work exactly as before.
+> **Tip**: Use the new `mlc-check` CLI tool to validate your configuration files for syntax and security issues after upgrading.

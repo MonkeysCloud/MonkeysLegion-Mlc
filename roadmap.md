@@ -104,7 +104,7 @@ This roadmap outlines the evolution of the MonkeysLegion MLC configuration libra
 
 ---
 
-## 🏗️ Phase 3: Architectural Refactoring
+## 🏗️ Phase 3: Architectural Refactoring ✅
 
 *Focus: Decoupling and extensibility.*
 
@@ -126,7 +126,7 @@ This roadmap outlines the evolution of the MonkeysLegion MLC configuration libra
 
 ---
 
-## 🔧 Phase 4: Developer Tooling & DX
+## 🔧 Phase 4: Developer Tooling & DX ✅
 
 *Focus: Making MLC a joy to work with.*
 

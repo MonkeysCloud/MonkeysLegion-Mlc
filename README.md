@@ -1,439 +1,156 @@
-# MonkeysLegion MLC - Configuration Parser
+# MonkeysLegion MLC - Configuration Engine
 
-Production-ready `.mlc` configuration file parser and loader for PHP 8.4+.
+Production-grade `.mlc` configuration engine for PHP 8.4+. High-performance, zero-overhead, and enterprise-secure.
 
-## Features
+[![Tests](https://github.com/monkeyscloud/monkeyslegion-mlc/actions/workflows/tests.yml/badge.svg)](https://github.com/monkeyscloud/monkeyslegion-mlc/actions)
+[![PHP Version](https://img.shields.io/badge/php-%3E%3D%208.4-8892bf.svg)](https://php.net)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-- 🚀 **Production-Ready**: Built for high-traffic sites with caching and validation
-- 🔒 **Secure**: Path traversal prevention, file permission checks
-- ⚡ **Fast**: File-based caching with automatic invalidation
-- 🎯 **Type-Safe**: Strong typing with helpful getters (`getString()`, `getInt()`, etc.)
-- 🔧 **Flexible**: Support for multiple config formats and merge strategies
-- 🛡️ **Validated**: Schema-based validation support
-- 📝 **Well-Documented**: Comprehensive error messages with line numbers
+## 🚀 Why MLC?
 
-## Installation
+MLC is designed for one core task: **parse once, serve from bytecode forever**. It moves configuration beyond simple file loading into a high-performance system for modern PHP environments (RoadRunner, Swoole, or standard FPM).
+
+- ⚡ **Zero-Overhead Production Mode**: Compiles MLC to static PHP arrays for OPcache optimization.
+- 🌍 **Deep Environment Integration**: Native `${VAR:-default}` expansion powered by `monkeyslegion-env`.
+- 🔒 **Enterprise Security**: Strict permission auditing, path traversal hardening, and circular reference detection.
+- 🎯 **Type-Safe DX**: Typed getters (`getString`, `getInt`, etc.) and a dual-layer mutation engine.
+- 🪝 **Event-Driven**: Lifecycle hooks (`onLoading`, `onLoaded`) with type-safe enums and proxies.
+- 📂 **Multi-Format Support**: Native support for `.mlc`, `.json`, `.yaml`, and `.php` arrays via a composite system.
+
+## 📦 Installation
 
 ```bash
 composer require monkeyscloud/monkeyslegion-mlc
 ```
 
-## Basic Usage
+## 🛠️ Basic Usage
 
-### Loading Configuration
+### Loading Configuration (Production-Ready)
+
+To use the full power of MLC, you need to initialize the environment bootstrapper and the parser.
 
 ```php
 use MonkeysLegion\Mlc\Loader;
-use MonkeysLegion\Mlc\Parser;
+use MonkeysLegion\Mlc\Parsers\MlcParser;
+use MonkeysLegion\Env\EnvManager;
+use MonkeysLegion\Env\Loaders\DotenvLoader;
+use MonkeysLegion\Env\Repositories\NativeEnvRepository;
 
+// 1. Initialize environment (MonkeysLegion-Env)
+$bootstrapper = new EnvManager(new DotenvLoader(), new NativeEnvRepository());
+
+// 2. Initialize Loader with MlcParser
 $loader = new Loader(
-    parser: new Parser(),
-    baseDir: '/path/to/config'
+    parser: new MlcParser($bootstrapper, $rootPath),
+    baseDir: __DIR__ . '/config'
 );
 
-// Load single file
-$config = $loader->loadOne('app');
-
-// Load and merge multiple files
-$config = $loader->load(['app', 'database', 'cache']);
+// 3. Load and merge files
+$config = $loader->load(['app', 'database']);
 ```
 
 ### Accessing Values
 
 ```php
+// Type-safe getters
+$port  = $config->getInt('database.port', 3306);
+$debug = $config->getBool('app.debug', false);
+$name  = $config->getString('app.name');
+
 // Dot-notation access
 $dbHost = $config->get('database.host', 'localhost');
 
-// Type-safe getters
-$port = $config->getInt('database.port', 3306);
-$debug = $config->getBool('app.debug', false);
-$name = $config->getString('app.name');
-$allowed = $config->getArray('cors.allowed_origins', []);
-
 // Required values (throws if missing)
 $secret = $config->getRequired('app.secret');
-
-// Check existence
-if ($config->has('redis.enabled')) {
-    // ...
-}
-
-// Get all data
-$all = $config->all();
 ```
 
-## MLC Format
+## ⚡ Zero-Overhead Mode (OPcache)
 
-### Basic Syntax
-
-```mlc
-# Comments start with #
-
-# Key-value pairs (both syntaxes work)
-app_name = "My Application"
-app_env  production
-
-# Numbers
-port = 8080
-timeout = 30.5
-
-# Booleans
-debug = true
-enabled false
-
-# Arrays
-allowed_ips = ["127.0.0.1", "192.168.1.1"]
-
-# Multi-line arrays
-allowed_methods = [
-    "GET",
-    "POST",
-    "PUT",
-    "DELETE"
-]
-
-# Sections
-database {
-    host = localhost
-    port = 3306
-    name = mydb
-    
-    # Nested sections
-    credentials {
-        username = root
-        password = secret
-    }
-}
-
-# Environment variables (via .env files)
-secret_key = ${APP_SECRET}
-```
-
-## Advanced Features
-
-### Caching
-
-The MLC package integrates with [MonkeysLegion-Cache](https://github.com/MonkeysCloud/MonkeysLegion-Cache) for high-performance caching with multiple drivers.
+In production, use the `CompiledPhpCache` to export your configuration to a static PHP file. This allows OPcache to store the configuration in shared memory.
 
 ```php
-use MonkeysLegion\Cache\CacheManager;
-use MonkeysLegion\Mlc\Loader;
-use MonkeysLegion\Mlc\Parser;
+use MonkeysLegion\Mlc\Cache\CompiledPhpCache;
 
-// Setup cache (supports File, Redis, Memcached, Array drivers)
-$cacheConfig = [
-    'default' => 'file',
-    'stores' => [
-        'file' => [
-            'driver' => 'file',
-            'path' => '/var/cache/mlc',
-            'prefix' => 'mlc_',
-        ],
-        'redis' => [
-            'driver' => 'redis',
-            'host' => '127.0.0.1',
-            'port' => 6379,
-            'database' => 1,
-            'prefix' => 'mlc_',
-        ],
-    ],
-];
+$cache  = new CompiledPhpCache('/var/cache/mlc');
+$loader = new Loader($parser, $baseDir, cache: $cache);
 
-$cacheManager = new CacheManager($cacheConfig);
-$cache = $cacheManager->store('file'); // PSR-16 CacheInterface
+// Warm-up cache (run during deployment)
+$loader->compile(['app', 'database']);
 
-$loader = new Loader(
-    parser: new Parser(),
-    baseDir: '/path/to/config',
-    cache: $cache
-);
-
+// Future loads are now instant (bytecode read)
 $config = $loader->load(['app', 'database']);
-
-// Clear cache when needed
-$loader->clearCache();
-
-// Or use the cache manager directly
-$cacheManager->clear();
 ```
 
-**Benefits of MonkeysLegion-Cache integration:**
-- PSR-16 compliant caching
-- Multiple cache drivers (File, Redis, Memcached, Array)
-- Cache tagging support
-- Automatic cache invalidation
-- Production-tested reliability
+## 🔄 Dual-Layer Overrides
 
-For more details on cache configuration and drivers, see the [MonkeysLegion-Cache documentation](https://github.com/MonkeysCloud/MonkeysLegion-Cache).
-
-### Validation
+Apply non-destructive runtime overrides without touching the compiled base. Perfect for feature flags or multi-tenancy.
 
 ```php
-use MonkeysLegion\Mlc\Validator\SchemaValidator;
+$config->override('app.debug', true);
+$config->get('app.debug'); // true
 
-$schema = [
-    'database' => [
-        'type' => 'array',
-        'required' => true,
-        'children' => [
-            'host' => ['type' => 'string', 'required' => true],
-            'port' => ['type' => 'int', 'required' => true, 'min' => 1, 'max' => 65535],
-            'name' => ['type' => 'string', 'required' => true],
-        ],
-    ],
-    'app' => [
-        'type' => 'array',
-        'children' => [
-            'debug' => ['type' => 'bool', 'required' => true],
-            'env' => [
-                'type' => 'string',
-                'required' => true,
-                'enum' => ['dev', 'staging', 'production'],
-            ],
-        ],
-    ],
-];
+// Export base ONLY (overrides excluded)
+$baseData = $config->all();
 
-$validator = new SchemaValidator($schema);
-$loader->setValidator($validator);
-
-try {
-    $config = $loader->load(['app', 'database']);
-} catch (LoaderException $e) {
-    // Validation failed
-    echo $e->getMessage();
-}
+// Flatten base + overrides into a fresh isolated instance
+$isolated = $config->snapshot();
 ```
 
-### Freezing Configuration
+## 🪝 Component Extensions
 
-Prevent accidental modifications in production:
+The `Loader` emits lifecycle events that you can hook into for logging or metrics.
 
 ```php
-$config = $loader->load(['app']);
-$config->freeze();
-
-// This will throw FrozenConfigException
-$config->set('app.debug', true);
+$loader->onLoading(fn($names) => logger()->info("Loading configs: " . implode(',', $names)));
+$loader->onLoaded(fn($config) => logger()->info("Config ready"));
 ```
 
-### Auto-Freeze
+## 📂 Multi-Format Support
+
+Use the `CompositeParser` to mix and match different configuration formats.
 
 ```php
-// Automatically freeze all loaded configs
-$loader->setAutoFreeze(true);
+use MonkeysLegion\Mlc\Parsers\CompositeParser;
+use MonkeysLegion\Mlc\Parsers\JsonParser;
+use MonkeysLegion\Mlc\Parsers\YamlParser;
 
-$config = $loader->load(['app']); // Already frozen
+$composite = new CompositeParser($mlcParser);
+$composite->registerParser('json', new JsonParser());
+$composite->registerParser('yaml', new YamlParser());
+
+$loader = new Loader($composite, $baseDir);
+// Automatically selects parser based on file extension (.mlc, .json, .yaml)
 ```
 
-### Hot-Reload Detection (Development)
+## 🛡️ Security Features
 
-```php
-$lastCheck = time();
+- **Path Traversal Prevention**: Strict validation of all relative paths.
+- **Permission Auditing**: In-depth check for world-writable files in production.
+- **Strict Mode**: `strictSecurity: true` throws exceptions instead of warnings for insecure files.
+- **Reference Tracking**: Prevents circular key references and infinite inclusion loops.
 
-// Later...
-if ($loader->hasChanges(['app', 'database'], $lastCheck)) {
-    $config = $loader->reload(['app', 'database']);
-    $lastCheck = time();
-}
-```
+## 🛠️ CLI Tool (`mlc-check`)
 
-### Configuration Subsets
-
-```php
-$config = $loader->load(['app']);
-
-// Get only database config
-$dbConfig = $config->subset('database');
-
-// Access as if it were root
-$host = $dbConfig->get('host'); // instead of 'database.host'
-```
-
-### Merging Configurations
-
-```php
-$baseConfig = $loader->load(['base']);
-$envConfig = $loader->load(['production']);
-
-$merged = $baseConfig->merge($envConfig);
-```
-
-### Export
-
-```php
-// To JSON
-$json = $config->toJson();
-
-// To array
-$array = $config->toArray();
-```
-
-## Environment Variables
-
-The loader automatically loads `.env` files in this order:
-
-1. `.env`
-2. `.env.local`
-3. `.env.{APP_ENV}`
-4. `.env.{APP_ENV}.local`
-
-Where `APP_ENV` is determined from `$_SERVER['APP_ENV']` or `$_ENV['APP_ENV']`.
-
-### Custom Environment Directory
-
-```php
-$loader = new Loader(
-    parser: new Parser(),
-    baseDir: '/path/to/config',
-    envDir: '/path/to/env'  // Different directory for .env files
-);
-```
-
-### Disable Auto-Load
-
-```php
-$loader = new Loader(
-    parser: new Parser(),
-    baseDir: '/path/to/config',
-    autoLoadEnv: false
-);
-
-// Load manually when needed
-$loader->loadEnvironment();
-```
-
-## Error Handling
-
-The package provides detailed error messages:
-
-```php
-use MonkeysLegion\Mlc\Exception\ParserException;
-use MonkeysLegion\Mlc\Exception\LoaderException;
-use MonkeysLegion\Mlc\Exception\SecurityException;
-
-try {
-    $config = $loader->load(['app']);
-} catch (ParserException $e) {
-    // Parse error with file and line number
-    echo $e->getMessage();
-    echo $e->getFile();
-    echo $e->getLine();
-} catch (SecurityException $e) {
-    // Security issue (path traversal, permissions, etc.)
-    echo $e->getMessage();
-} catch (LoaderException $e) {
-    // Loading error (file not found, validation failed, etc.)
-    echo $e->getMessage();
-}
-```
-
-## Security Features
-
-- **Path Traversal Prevention**: Validates all file paths
-- **File Permission Checks**: Warns about world-writable configs
-- **File Size Limits**: Prevents DoS via large files (10MB default)
-- **Depth Limits**: Prevents infinite nesting (50 levels default)
-- **Immutability**: Frozen configs cannot be modified
-
-## Performance
-
-### Benchmarks
-
-With caching enabled:
-- **First load**: ~5ms for 5 config files
-- **Cached load**: ~0.5ms (10x faster)
-- **Memory**: ~50KB per config
-
-### Best Practices
-
-1. **Always use caching in production**
-2. **Freeze configs after loading**
-3. **Use type-safe getters** for better IDE support
-4. **Validate configs** to catch errors early
-5. **Cache configs at application bootstrap**
-
-## Backwards Compatibility
-
-This version is **100% backwards compatible** with 1.x:
-
-```php
-// Old code still works
-$loader = new Loader(new Parser(), '/path/to/config');
-$config = $loader->load(['app']);
-$value = $config->get('key.path');
-
-// New features are opt-in
-$config->freeze();  // New
-$config->getInt('port', 8080);  // New
-```
-
-## Migration from 1.x
-
-No changes required! The new version is a drop-in replacement.
-
-To use new features:
-
-```php
-// Add caching
-$loader = new Loader(
-    new Parser(),
-    '/path/to/config',
-    cache: new FileCache('/tmp/config-cache')
-);
-
-// Use type-safe getters
-$port = $config->getInt('server.port', 8080);
-
-// Freeze in production
-if ($_ENV['APP_ENV'] === 'production') {
-    $config->freeze();
-}
-```
-
-## Testing
+Validate your configuration files for syntax, security, and integrity from the terminal.
 
 ```bash
-# Run tests
-composer test
-
-# Run static analysis
-composer stan
-
-# Fix code style
-composer cs-fix
-
-# Run all CI checks
-composer ci
+php bin/mlc-check ./config
 ```
 
-## License
+## 📚 Documentation
 
-MIT License - see LICENSE file for details.
+- [Full Developer Documentation](documentation.md)
+- [Multi-Format Support Guide](multi_format_support.md)
+- [Upgrading to v3.0.0](UPGRADE.md)
 
-## Support
+## 🧪 Testing
 
-- **Issues**: https://github.com/monkeyscloud/monkeyslegion-mlc/issues
-- **Documentation**: https://monkeyslegion.com/docs/packages/mlc
+```bash
+composer test    # Run PHPUnit suite
+composer stan    # Run static analysis (Level 9)
+composer ci      # Run full quality pipeline
+```
 
-## Changelog
+## 📜 License
 
-### 2.0.0 (Production Release)
-
-- ✨ Added caching support (File, Null)
-- ✨ Added schema validation
-- ✨ Added type-safe getters
-- ✨ Added config freezing
-- ✨ Added security checks
-- ✨ Better error messages with line numbers
-- ✨ Hot-reload detection
-- ✨ Configuration subsets and merging
-- 🔒 Path traversal prevention
-- 🔒 File permission checks
-- 🐛 Fixed edge cases in parser
-- 📝 Comprehensive documentation
-- ✅ 100% backwards compatible with 1.x
-
-### 1.0.0
-
-- Initial release
+The MIT License (MIT). Please see [License File](LICENSE) for more information.

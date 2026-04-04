@@ -59,4 +59,12 @@ interface LoaderInterface
      * Clear all caches managed by this loader.
      */
     public function clearCache(): void;
+
+    /**
+     * Trigger fresh parse and write to cache.
+     *
+     * @param string[] $names
+     * @return Config
+     */
+    public function compile(array $names): Config;
 }

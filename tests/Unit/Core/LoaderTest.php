@@ -142,4 +142,22 @@ class LoaderTest extends TestCase
         $cache->method('get')->willReturn(null);
         $this->assertTrue($loader->hasChanges(['app']));
     }
+
+    #[Test]
+    public function test_compile_should_bypass_get_and_call_set(): void
+    {
+        $cache = $this->createMock(CacheInterface::class);
+        $loader = new Loader($this->parser, $this->baseDir, cache: $cache);
+
+        file_put_contents($this->baseDir . '/app.mlc', "name 'App'");
+
+        // compile should:
+        // 1. NOT call cache->get (bypass read)
+        // 2. call cache->set (write result)
+        $cache->expects($this->never())->method('get');
+        $cache->expects($this->once())->method('set');
+
+        $config = $loader->compile(['app']);
+        $this->assertEquals('App', $config->get('name'));
+    }
 }

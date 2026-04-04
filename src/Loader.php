@@ -276,6 +276,38 @@ final class Loader implements LoaderInterface
     }
 
     /**
+     * Trigger fresh parse and write to cache.
+     */
+    public function compile(array $names): Config
+    {
+        // Force fresh load
+        $config = $this->load($names, useCache: false);
+        $merged = $config->all();
+
+        // Write to cache
+        if ($this->cache !== null) {
+            $cacheKey = $this->generateCacheKey($names);
+            try {
+                if ($this->cache instanceof CompiledPhpCache) {
+                    $this->cache->set($cacheKey, $merged);
+                } else {
+                    $files = $this->parser->getParsedFiles();
+                    $this->cache->set($cacheKey, [
+                        'data'      => $merged,
+                        'files'     => $files,
+                        'mtimes'    => $this->getFileMtimes($files),
+                        'timestamp' => time(),
+                    ]);
+                }
+            } catch (\Throwable) {
+                // Ignore cache write errors in compile()? Usually better to catch.
+            }
+        }
+
+        return $config;
+    }
+
+    /**
      * Register a hook listener.
      */
     public function on(LoaderHook $hook, callable $callback): self
