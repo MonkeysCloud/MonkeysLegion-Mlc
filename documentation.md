@@ -20,7 +20,8 @@
 12. [Security Features](#-security-features)
 13. [Multi-Format Support](#-multi-format-support)
 14. [CLI Tooling (`mlc-check`)](#-cli-tooling-mlc-check)
-15. [API Reference](#-api-reference)
+23. [Event Hooks](#-event-hooks)
+24. [API Reference](#-api-reference)
 
 ---
 
@@ -488,19 +489,63 @@ php bin/mlc-check ./config
 
 ---
 
+## 🪝 Event Hooks
+
+The `Loader` emits events during its lifecycle, allowing you to hook into the loading process for logging, metrics, or custom post-processing. Use the dedicated proxy methods or the `LoaderHook` enum for type-safe registration.
+
+### Registering Listeners
+
+Recommended way using proxy methods:
+
+```php
+$loader->onLoading(function(array $names) {
+    // Triggered before any files are loaded or cache is checked
+});
+
+$loader->onLoaded(function(Config $config) {
+    // Triggered after configuration is fully merged and validated
+});
+
+$loader->onValidationError(function(array $errors, array $data) {
+    // Triggered when validation fails (before the exception is thrown)
+});
+```
+
+Alternative way using the `LoaderHook` enum:
+
+```php
+use MonkeysLegion\Mlc\Enums\LoaderHook;
+
+$loader->on(LoaderHook::Loading, function(array $names) { ... });
+```
+
+### Hook Reference
+
+| Hook                | Arguments                      | Description                             |
+|---------------------|--------------------------------|-----------------------------------------|
+| `onLoading`         | `(array $names)`               | Fired at the start of `load()`.         |
+| `onLoaded`          | `(Config $config)`             | Fired right before `load()` returns.    |
+| `onValidationError` | `(array $errors, array $data)` | Fired when a validator returns errors.  |
+
+---
+
 ## 📚 API Reference
 
 ### `Loader`
 
-| Method | Signature | Description |
-|---|---|---|
-| `load` | `(string[] $names, bool $useCache = true): Config` | Load and merge named config files. |
-| `loadOne` | `(string $name, bool $useCache = true): Config` | Load a single config file. |
-| `reload` | `(string[] $names): Config` | Force fresh parse, bypass cache. |
-| `compile` | `(string[] $names): Config` | Compile to OPcache PHP file (requires `CompiledPhpCache`). |
+| Method                                    | Signature                                      | Description                                    |
+|-------------------------------------------|------------------------------------------------|------------------------------------------------|
+| `load`                                    | `(string[] $names, bool $useCache = true): Config` | Load and merge named config files.             |
+| `loadOne`                                 | `(string $name, bool $useCache = true): Config` | Load a single config file.                     |
+| `reload`                                  | `(string[] $names): Config`                    | Force fresh parse, bypass cache.               |
+| `compile`                                 | `(string[] $names): Config`                    | Compile to OPcache PHP file (requires `CompiledPhpCache`). |
 | `hasChanges` | `(string[] $names): bool` | Detect if source files have changed since last cache write. |
 | `clearCache` | `(): void` | Clear all cache entries. |
 | `setValidator` | `(?ConfigValidatorInterface $v): self` | Attach a schema validator. |
+| `on` | `(LoaderHook $hook, callable $cb): self` | Register an event listener. |
+| `onLoading` | `(callable $cb): self` | Proxy for `LoaderHook::Loading`. |
+| `onLoaded` | `(callable $cb): self` | Proxy for `LoaderHook::Loaded`. |
+| `onValidationError` | `(callable $cb): self` | Proxy for `LoaderHook::ValidationError`. |
 
 ### `Config`
 

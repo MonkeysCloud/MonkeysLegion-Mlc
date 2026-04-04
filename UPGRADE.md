@@ -376,7 +376,6 @@ The only new requirement is PHP 8.4+. All other dependencies are optional (dev d
 ## Questions?
 
 - Check the [README](README.md) for complete documentation
-- Check the [examples](examples/) directory for code examples
 - Open an issue on GitHub for questions
 
 ## Rollback

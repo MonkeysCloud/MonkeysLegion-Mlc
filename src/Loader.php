@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace MonkeysLegion\Mlc;
 
+use MonkeysLegion\Mlc\Config;
+use MonkeysLegion\Mlc\Enums\LoaderHook;
 use MonkeysLegion\Mlc\Exception\LoaderException;
 use MonkeysLegion\Mlc\Contracts\ConfigValidatorInterface;
 use MonkeysLegion\Mlc\Contracts\ParserInterface;
@@ -32,9 +34,13 @@ final class Loader implements LoaderInterface
     /**
      * Whether environment variables have been loaded.
      */
-    private bool $envLoaded = false;
-
     private ?ConfigValidatorInterface $validator = null;
+
+    /**
+     * Hook listeners.
+     * @var array<string, callable[]>
+     */
+    private array $listeners = [];
 
     // ── Lifecycle ──────────────────────────────────────────────
 
@@ -93,6 +99,9 @@ final class Loader implements LoaderInterface
         // Generate cache key
         $cacheKey = $this->generateCacheKey($names);
 
+        // ── Hooks: onLoading ────────────────────────────────────────────────
+        $this->emit(LoaderHook::Loading, $names);
+
         // ── Fast-path: CompiledPhpCache ─────────────────────────────────────
         // Compiled cache stores raw arrays — no metadata envelope needed.
         // OPcache will serve this from shared memory on warm hits.
@@ -150,6 +159,9 @@ final class Loader implements LoaderInterface
         if ($this->validator !== null) {
             $errors = $this->validator->validate($merged);
             if (!empty($errors)) {
+                // ── Hooks: onValidationError ────────────────────────────────────────
+                $this->emit(LoaderHook::ValidationError, $errors, $merged);
+
                 throw new LoaderException(
                     "Config validation failed:\n" . implode("\n", $errors)
                 );
@@ -176,7 +188,12 @@ final class Loader implements LoaderInterface
             }
         }
 
-        return new Config($merged);
+        $config = new Config($merged);
+
+        // ── Hooks: onLoaded ──────────────────────────────────────────────────
+        $this->emit(LoaderHook::Loaded, $config);
+
+        return $config;
     }
 
     /**
@@ -255,6 +272,49 @@ final class Loader implements LoaderInterface
                 0,
                 $e,
             );
+        }
+    }
+
+    /**
+     * Register a hook listener.
+     */
+    public function on(LoaderHook $hook, callable $callback): self
+    {
+        $this->listeners[$hook->value][] = $callback;
+        return $this;
+    }
+
+    /**
+     * Register a listener for the 'onLoading' hook.
+     */
+    public function onLoading(callable $callback): self
+    {
+        return $this->on(LoaderHook::Loading, $callback);
+    }
+
+    /**
+     * Register a listener for the 'onLoaded' hook.
+     */
+    public function onLoaded(callable $callback): self
+    {
+        return $this->on(LoaderHook::Loaded, $callback);
+    }
+
+    /**
+     * Register a listener for the 'onValidationError' hook.
+     */
+    public function onValidationError(callable $callback): self
+    {
+        return $this->on(LoaderHook::ValidationError, $callback);
+    }
+
+    /**
+     * Emit a hook event.
+     */
+    private function emit(LoaderHook $hook, mixed ...$args): void
+    {
+        foreach ($this->listeners[$hook->value] ?? [] as $callback) {
+            $callback(...$args);
         }
     }
 
