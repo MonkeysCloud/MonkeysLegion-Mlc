@@ -88,9 +88,9 @@ This roadmap outlines the evolution of the MonkeysLegion MLC configuration libra
 
 - [x] **Task**: Fine-grained control over what layers can be mutated.
 - **Technical Detail**:
-  - `Config->lockBase()`: Seals the compiled base layer; runtime `override()` calls are still allowed.
-  - `Config->lockAll()`: Fully immutable — throws `FrozenConfigException` on any further mutation.
-  - `freeze()` (existing) seals `set()` access to the base but leaves the override layer open.
+  - `Config->lock()`: Seals the compiled base layer; runtime `override()` calls are still allowed.
+  - `Config->lockOverrides()`: Fully immutable — throws `FrozenConfigException` on any further mutation.
+  - **Note**: Legacy `freeze()` and `set()` methods are removed in v3.0 in favor of the Dual-Layer Engine.
 - **Priority**: Medium
 
 ### 2.3 Recursive Includes
@@ -141,9 +141,10 @@ This roadmap outlines the evolution of the MonkeysLegion MLC configuration libra
 
 ### 4.2 Multi-Format Bridge (JSON, PHP, YAML)
 
-- [x] **Task**: Support loading non-MLC formats.
+- [x] **Task**: Support loading non-MLC formats via `CompositeParser`.
 - **Technical Detail**:
-  - `Loader` automatically detects format from extension.
+  - `Loader` continues to resolve file existance and pass paths to the parser.
+  - `CompositeParser` delegating to specialized parsers based on extension.
   - JSON: Using `json_decode`.
   - PHP: Using `include` (returning arrays).
   - YAML: Native lightweight parser (no Symfony dependency).

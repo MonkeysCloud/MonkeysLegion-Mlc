@@ -9,23 +9,28 @@ MLC v3 is a major architectural update focusing on **zero-overhead performance**
 To comply with the new decoupled architecture, constructors for `Loader`, `MlcParser`, and `PhpParser` have been significantly changed.
 
 ### Loader
+
 The `Loader` now strictly requires a `ParserInterface` implementation and does not handle environment loading itself.
 
 **Before (v2.x):**
+
 ```php
 $loader = new Loader(new Parser(), $baseDir, $envDir, $cache, $autoLoadEnv);
 ```
 
 **After (v3.0):**
+
 ```php
 // Standard MLC usage
 $loader = new Loader(new MlcParser($bootstrapper, $root), $baseDir, cache: $cache);
 ```
 
 ### MLC/PHP Parsers
+
 Parsers now require an `EnvBootstrapperInterface` and the project root directory to handle environment resolution and file security correctly.
 
 **After (v3.0):**
+
 ```php
 use MonkeysLegion\Env\EnvManager;
 use MonkeysLegion\Env\Loaders\DotenvLoader;
@@ -34,6 +39,7 @@ use MonkeysLegion\Env\Repositories\NativeEnvRepository;
 $bootstrapper = new EnvManager(new DotenvLoader(), new NativeEnvRepository());
 $parser = new MlcParser($bootstrapper, $rootPath);
 ```
+
 ***Note: The Parser class has been renamed to MlcParser; both MlcParser and PhpParser require an EnvBootstrapperInterface implementation, whereas YamlParser and JsonParser do not.***
 
 ---
@@ -49,18 +55,20 @@ MLC no longer bundles `vlucas/phpdotenv`. All environment resolution is now hand
 
 ## 🧠 3. Config Immutability & Overrides (Medium Impact)
 
-The original `set()` method and related mutation behaviors are deprecated in favor of a **Dual-Layer Engine**.
+The original `set()` method and related mutation behaviors have been **REMOVED** in favor of the new **Dual-Layer Engine**.
 
 - **Locked Base**: By default, the compiled base of a `Config` instance is immutable.
 - **Runtime Overrides**: Use `override(path, value)` to apply non-destructive runtime changes.
 - **Snapshots**: Use `snapshot()` to get a fresh, isolated `Config` instance containing all current overrides.
 
 **Before (v2.x):**
+
 ```php
-$config->set('app.debug', true); // Mutates current instance
+$config->set('app.debug', true); // Mutates current instance (REMOVED in v3)
 ```
 
 **After (v3.0):**
+
 ```php
 $config->override('app.debug', true); // Non-destructive override on top of base
 $isolatedSnap = $config->snapshot(); // Isolated copy, overrides baked into base
@@ -82,6 +90,7 @@ Security warnings regarding world-writable files in production have been upgrade
 If you were manually wrapping the `Loader` to track activity, you can now use the native hook system.
 
 **After (v3.0):**
+
 ```php
 $loader->onLoading(fn($names) => log("Loading: " . implode(',', $names)));
 $loader->onLoaded(fn($config) => log("Config fully loaded"));

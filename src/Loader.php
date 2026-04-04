@@ -248,8 +248,14 @@ final class Loader implements LoaderInterface
                 return true;
             }
 
+            // CompiledPhpCache stores raw bytecode arrays—it doesn't support drift detection.
+            // If the data exists, we assume it's valid.
+            if ($this->cache instanceof CompiledPhpCache) {
+                return false;
+            }
+
             return !$this->isCacheValid($names, $cached);
-        } catch (\Throwable $e) {
+        } catch (\Throwable) {
             return true;
         }
     }

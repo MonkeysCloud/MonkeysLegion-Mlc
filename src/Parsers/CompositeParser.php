@@ -21,6 +21,11 @@ final class CompositeParser implements ParserInterface
     private array $parsers = [];
 
     /**
+     * The parser used for the most recent operation.
+     */
+    private ?ParserInterface $lastActiveParser = null;
+
+    /**
      * Constructor for CompositeParser.
      *
      * @param ParserInterface $defaultParser Parser used for .mlc and files with no extension
@@ -62,28 +67,22 @@ final class CompositeParser implements ParserInterface
     public function parseFile(string $file): array
     {
         $extension = pathinfo($file, PATHINFO_EXTENSION);
-        $parser = $this->parsers[$extension] ?? $this->defaultParser;
+        $this->lastActiveParser = $this->parsers[$extension] ?? $this->defaultParser;
 
-        return $parser->parseFile($file);
+        return $this->lastActiveParser->parseFile($file);
     }
 
     public function parseContent(string $content, string $filename = '<string>', bool $resolveReferences = true): array
     {
         $extension = pathinfo($filename, PATHINFO_EXTENSION);
-        $parser = $this->parsers[$extension] ?? $this->defaultParser;
+        $this->lastActiveParser = $this->parsers[$extension] ?? $this->defaultParser;
 
-        return $parser->parseContent($content, $filename, $resolveReferences);
+        return $this->lastActiveParser->parseContent($content, $filename, $resolveReferences);
     }
 
     public function getParsedFiles(): array
     {
-        // For simplicity, we just aggregate all from all parsers if needed
-        // but typically only one parser is active at a time for a single file.
-        $files = [];
-        foreach ($this->parsers as $parser) {
-            $files = array_unique(array_merge($files, $parser->getParsedFiles()));
-        }
-        return $files;
+        return $this->lastActiveParser?->getParsedFiles() ?? [];
     }
 
     public function getDefaultParser(): ParserInterface
