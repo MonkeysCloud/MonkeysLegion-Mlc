@@ -160,10 +160,18 @@ The `Loader` is the primary entry point. It requires a `Parser` instance and a b
 ```php
 use MonkeysLegion\Mlc\Loader;
 use MonkeysLegion\Mlc\Parsers\MlcParser;
+use MonkeysLegion\Env\EnvManager;
+use MonkeysLegion\Env\Loaders\DotenvLoader;
+use MonkeysLegion\Env\Repositories\NativeEnvRepository;
 
-$loader = new Loader(new MlcParser(), __DIR__ . '/config');
+// 1. Bootstrap environment for the parser
+$env = new EnvManager(new DotenvLoader(), new NativeEnvRepository());
+$parser = new MlcParser($env, __DIR__ . '/config');
 
-// Load and merge one or more named files (without .mlc extension)
+// 2. Initialize the loader
+$loader = new Loader($parser, __DIR__ . '/config');
+
+// 3. Load and merge configuration
 $config = $loader->load(['app', 'database']);
 
 // Shorthand for a single file
@@ -222,9 +230,14 @@ $config->merge($other);      // new Config with $other merged on top
 use MonkeysLegion\Mlc\Cache\CompiledPhpCache;
 use MonkeysLegion\Mlc\Loader;
 use MonkeysLegion\Mlc\Parsers\MlcParser;
+use MonkeysLegion\Env\EnvManager;
+use MonkeysLegion\Env\Loaders\DotenvLoader;
+use MonkeysLegion\Env\Repositories\NativeEnvRepository;
 
+$env    = new EnvManager(new DotenvLoader(), new NativeEnvRepository());
+$parser = new MlcParser($env, __DIR__ . '/config');
 $cache  = new CompiledPhpCache('/var/cache/mlc');
-$loader = new Loader(new MlcParser(), __DIR__ . '/config', cache: $cache);
+$loader = new Loader($parser, __DIR__ . '/config', cache: $cache);
 ```
 
 ### Compile once — serve forever
@@ -445,10 +458,10 @@ MLC is designed to be secure by default:
 | **File size limit** | Files larger than 10 MB are rejected (`SecurityException`). |
 | **Circular reference detection** | Cross-key and env-var cycles throw `CircularDependencyException`. |
 
-```php
 // Enable strict security mode
-$loader = new Loader(new MlcParser(), __DIR__ . '/config', strictSecurity: true);
-```
+$env    = new EnvManager(new DotenvLoader(), new NativeEnvRepository());
+$parser = new MlcParser($env, __DIR__ . '/config');
+$loader = new Loader($parser, __DIR__ . '/config', strictSecurity: true);
 
 ---
 

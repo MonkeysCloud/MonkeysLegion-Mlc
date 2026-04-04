@@ -119,4 +119,34 @@ class LoaderHookTest extends TestCase
         
         $this->assertTrue($errorTriggered);
     }
+
+    #[Test]
+    public function test_hooks_trigger_on_cache_hits(): void
+    {
+        $cache = new StubArrayCache();
+        $this->loader = new Loader(new MlcParser(new EnvManager(new DotenvLoader(), new NativeEnvRepository()), $this->baseDir), $this->baseDir, cache: $cache);
+        
+        file_put_contents($this->baseDir . '/app.mlc', 'key = "val"');
+        
+        $loadingCount = 0;
+        $loadedCount = 0;
+        
+        $this->loader->onLoading(function() use (&$loadingCount) {
+            $loadingCount++;
+        });
+        
+        $this->loader->onLoaded(function() use (&$loadedCount) {
+            $loadedCount++;
+        });
+        
+        // 1. First load (fresh)
+        $this->loader->load(['app']);
+        $this->assertEquals(1, $loadingCount);
+        $this->assertEquals(1, $loadedCount);
+        
+        // 2. Second load (cache hit)
+        $this->loader->load(['app']);
+        $this->assertEquals(2, $loadingCount);
+        $this->assertEquals(2, $loadedCount);
+    }
 }

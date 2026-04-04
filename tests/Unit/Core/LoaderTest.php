@@ -160,4 +160,35 @@ class LoaderTest extends TestCase
         $config = $loader->compile(['app']);
         $this->assertEquals('App', $config->get('name'));
     }
+
+    #[Test]
+    public function test_cache_invalidation_works_for_parsers_with_empty_parsed_files(): void
+    {
+        $stubCache = new StubArrayCache();
+
+        // Use a parser that returns [] from getParsedFiles
+        $plainParser = $this->createMock(\MonkeysLegion\Mlc\Contracts\ParserInterface::class);
+        $plainParser->method('parseFile')->willReturn(['key' => 'val']);
+        $plainParser->method('getParsedFiles')->willReturn([]);
+
+        $loader = new Loader($plainParser, $this->baseDir, cache: $stubCache);
+
+        file_put_contents($this->baseDir . '/app.mlc', 'key = val');
+
+        // Load into cache
+        $loader->load(['app']);
+
+        // Cache should be valid
+        $this->assertFalse($loader->hasChanges(['app']));
+
+        // Verify the cache envelope contains the file
+        $cached = $stubCache->all();
+        $envelope = reset($cached);
+        $this->assertContains(realpath($this->baseDir . '/app.mlc'), $envelope['files']);
+
+        // Modify file and check changes
+        sleep(1); // Ensure mtime change
+        touch($this->baseDir . '/app.mlc');
+        $this->assertTrue($loader->hasChanges(['app']));
+    }
 }

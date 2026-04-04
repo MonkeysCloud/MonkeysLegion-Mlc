@@ -19,10 +19,13 @@ use MonkeysLegion\Mlc\Parsers\JsonParser;
 use MonkeysLegion\Mlc\Parsers\YamlParser;
 use MonkeysLegion\Mlc\Parsers\PhpParser;
 use MonkeysLegion\Mlc\Parsers\CompositeParser;
+use MonkeysLegion\Env\EnvManager;
+use MonkeysLegion\Env\Loaders\DotenvLoader;
 use MonkeysLegion\Env\Repositories\NativeEnvRepository;
 
-// 1. Create the base MLC parser
-$mlcParser = new MlcParser(new NativeEnvRepository());
+// 1. Create the base MLC parser with environment support
+$env = new EnvManager(new DotenvLoader(), new NativeEnvRepository());
+$mlcParser = new MlcParser($env, __DIR__ . '/config');
 
 // 2. Wrap it in a CompositeParser and register extensions
 $composite = new CompositeParser($mlcParser);

@@ -39,13 +39,16 @@ use MonkeysLegion\Env\Repositories\NativeEnvRepository;
 // 1. Initialize environment (MonkeysLegion-Env)
 $bootstrapper = new EnvManager(new DotenvLoader(), new NativeEnvRepository());
 
-// 2. Initialize Loader with MlcParser
+// 2. Initialize MlcParser with the bootstrapper
+$parser = new MlcParser($bootstrapper, $rootPath);
+
+// 3. Initialize Loader
 $loader = new Loader(
-    parser: new MlcParser($bootstrapper, $rootPath),
+    parser: $parser,
     baseDir: __DIR__ . '/config'
 );
 
-// 3. Load and merge files
+// 4. Load and merge files
 $config = $loader->load(['app', 'database']);
 ```
 

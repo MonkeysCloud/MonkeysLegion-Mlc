@@ -6,7 +6,7 @@ MLC v3 is a major architectural update focusing on **zero-overhead performance**
 
 ## 🚀 1. Constructor Signature Changes (High Impact)
 
-To comply with the new decoupled architecture, constructors for `Loader`, `MlcParser`, and `PhpParser` have been significiantly changed.
+To comply with the new decoupled architecture, constructors for `Loader`, `MlcParser`, and `PhpParser` have been significantly changed.
 
 ### Loader
 The `Loader` now strictly requires a `ParserInterface` implementation and does not handle environment loading itself.
@@ -34,7 +34,7 @@ use MonkeysLegion\Env\Repositories\NativeEnvRepository;
 $bootstrapper = new EnvManager(new DotenvLoader(), new NativeEnvRepository());
 $parser = new MlcParser($bootstrapper, $rootPath);
 ```
-***Note: The Parser class has been renamed to MlcParser and both MlcParser ad PhpParser requires an EnvBootstrapperInterface implementation the YamlParser and JsonParser does not.***
+***Note: The Parser class has been renamed to MlcParser; both MlcParser and PhpParser require an EnvBootstrapperInterface implementation, whereas YamlParser and JsonParser do not.***
 
 ---
 

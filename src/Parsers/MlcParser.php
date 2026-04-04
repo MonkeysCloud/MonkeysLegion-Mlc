@@ -110,7 +110,8 @@ final class MlcParser implements ParserInterface
     public function parseFile(string $file): array
     {
         $this->allParsedFiles = [];
-        $this->includeStack = [$file];
+        $real = realpath($file);
+        $this->includeStack = [$real ?: $file];
         $data = $this->parseFileInternal($file);
         $this->includeStack = [];
 

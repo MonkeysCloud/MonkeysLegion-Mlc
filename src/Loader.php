@@ -6,6 +6,7 @@ namespace MonkeysLegion\Mlc;
 
 use MonkeysLegion\Mlc\Config;
 use MonkeysLegion\Mlc\Enums\LoaderHook;
+use MonkeysLegion\Mlc\Exception\ConfigException;
 use MonkeysLegion\Mlc\Exception\LoaderException;
 use MonkeysLegion\Mlc\Contracts\ConfigValidatorInterface;
 use MonkeysLegion\Mlc\Contracts\ParserInterface;
@@ -23,8 +24,11 @@ use MonkeysLegion\Mlc\Contracts\CacheInterface;
  * - Hot-reload detection in development
  *
  * Usage:
- *   // Load environment repository offered by MonkeysLegion-Env
- *   $loader = new Loader(new MlcParser(new NativeEnvRepository()), '/path/to/config');
+ *   // Bootstrap environment repository via MonkeysLegion-Env
+ *   $env = new EnvManager(new DotenvLoader(), new NativeEnvRepository());
+ *   $parser = new MlcParser($env, $rootPath);
+ *
+ *   $loader = new Loader($parser, '/path/to/config');
  *   $config = $loader->load(['app', 'cors']);
  */
 final class Loader implements LoaderInterface
@@ -45,13 +49,9 @@ final class Loader implements LoaderInterface
     // ── Lifecycle ──────────────────────────────────────────────
 
     /**
-     * Loader constructor.
-     *
      * @param ParserInterface     $parser         Parser implementation
      * @param string              $baseDir        Directory containing .mlc files
-     * @param string|null         $envDir         Directory containing .env files (defaults to baseDir)
      * @param CacheInterface|null $cache          Optional PSR-16 cache implementation
-     * @param bool                $autoLoadEnv    Automatically load .env files (default: true)
      * @param bool                $strictSecurity Throw exceptions if files are world-writable (default: false)
      */
     public function __construct(
@@ -108,7 +108,9 @@ final class Loader implements LoaderInterface
         if ($useCache && $this->cache instanceof CompiledPhpCache) {
             $compiled = $this->cache->get($cacheKey);
             if (is_array($compiled)) {
-                return new Config($compiled);
+                $config = new Config($compiled);
+                $this->emit(LoaderHook::Loaded, $config);
+                return $config;
             }
         }
 
@@ -116,11 +118,13 @@ final class Loader implements LoaderInterface
         if ($useCache && $this->cache !== null && !($this->cache instanceof CompiledPhpCache)) {
             try {
                 $cached = $this->cache->get($cacheKey);
-                
+
                 if (is_array($cached) && $this->isCacheValid($names, $cached)) {
                     $data = $cached['data'] ?? null;
                     if (is_array($data)) {
-                        return new Config($data);
+                        $config = new Config($data);
+                        $this->emit(LoaderHook::Loaded, $config);
+                        return $config;
                     }
                 }
             } catch (\Throwable) {
@@ -131,14 +135,20 @@ final class Loader implements LoaderInterface
         // Load and merge configs
         $merged = [];
         $files = [];
-        
+
         foreach ($names as $name) {
             $path = $this->resolveConfigPath($name);
-            
+
             try {
                 $data = $this->parser->parseFile($path);
-                
-                // Track ALL files involved (including recursive includes) for cache invalidation
+
+                // Always track the main resolved path for cache invalidation
+                $realPath = realpath($path);
+                if ($realPath && !in_array($realPath, $files, true)) {
+                    $files[] = $realPath;
+                }
+
+                // Track ANY sub-files involved (e.g. recursive @includes from MlcParser)
                 foreach ($this->parser->getParsedFiles() as $parsedPath) {
                     if (!in_array($parsedPath, $files, true)) {
                         $files[] = $parsedPath;
@@ -291,7 +301,21 @@ final class Loader implements LoaderInterface
                 if ($this->cache instanceof CompiledPhpCache) {
                     $this->cache->set($cacheKey, $merged);
                 } else {
-                    $files = $this->parser->getParsedFiles();
+                    $files = [];
+                    foreach ($names as $name) {
+                        $path = $this->resolveConfigPath($name);
+                        $realPath = realpath($path);
+                        if ($realPath && !in_array($realPath, $files, true)) {
+                            $files[] = $realPath;
+                        }
+                    }
+
+                    foreach ($this->parser->getParsedFiles() as $pf) {
+                        if (!in_array($pf, $files, true)) {
+                            $files[] = $pf;
+                        }
+                    }
+
                     $this->cache->set($cacheKey, [
                         'data'      => $merged,
                         'files'     => $files,
@@ -299,8 +323,8 @@ final class Loader implements LoaderInterface
                         'timestamp' => time(),
                     ]);
                 }
-            } catch (\Throwable) {
-                // Ignore cache write errors in compile()? Usually better to catch.
+            } catch (\Throwable $e) {
+                throw new ConfigException("Failed to write cache: {$e->getMessage()}", 0, $e);
             }
         }
 
