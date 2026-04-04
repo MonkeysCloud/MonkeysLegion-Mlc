@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace MonkeysLegion\Mlc;
+namespace MonkeysLegion\Mlc\Parsers;
 
 use MonkeysLegion\Mlc\Exception\ParserException;
 use MonkeysLegion\Mlc\Exception\SecurityException;
@@ -10,6 +10,7 @@ use MonkeysLegion\Mlc\Exception\CircularDependencyException;
 
 use JsonException;
 use MonkeysLegion\Env\Contracts\EnvRepositoryInterface;
+use MonkeysLegion\Mlc\Parsers\Traits\FileSecurityTrait;
 use MonkeysLegion\Mlc\Contracts\ParserInterface;
 
 /**
@@ -25,11 +26,11 @@ use MonkeysLegion\Mlc\Contracts\ParserInterface;
  * - Circular reference detection
  * - Performance optimizations
  */
-final class Parser implements ParserInterface
+final class MlcParser implements ParserInterface
 {
     // ── Configuration ──────────────────────────────────────────
 
-    private const int MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+    use FileSecurityTrait;
 
     private const int MAX_DEPTH = 50;
 
@@ -38,8 +39,6 @@ final class Parser implements ParserInterface
     private int $currentLine = 0;
 
     private string $currentFile = '';
-
-    private bool $strictSecurity = false;
 
     /**
      * Stack of files currently being parsed to detect circular inclusions.
@@ -53,6 +52,11 @@ final class Parser implements ParserInterface
      */
     private array $allParsedFiles = [];
 
+    /**
+     * Optional delegate parser to handle includes of other formats (JSON, YAML, etc.).
+     */
+    private ?ParserInterface $delegate = null;
+
     // ── Constructor ──────────────────────────────────────────────
 
     public function __construct(
@@ -60,6 +64,18 @@ final class Parser implements ParserInterface
     ) {}
 
     // ── Public API ──────────────────────────────────────────────
+
+    /**
+     * Set a delegate parser to handle cross-format includes.
+     *
+     * @param ParserInterface $delegate
+     * @return $this
+     */
+    public function setDelegate(ParserInterface $delegate): self
+    {
+        $this->delegate = $delegate;
+        return $this;
+    }
 
     /**
      * Enable or disable strict security checks.
@@ -108,9 +124,7 @@ final class Parser implements ParserInterface
             $this->currentLine = 0;
 
             // Security checks
-            $this->validateFilePath($file);
-            $this->validateFileAccess($file);
-            $this->validateFileSize($file);
+            $this->validateFileSecurity($file);
 
             // Add to the list of all parsed files for cache tracking
             $realPath = realpath($file);
@@ -223,7 +237,19 @@ final class Parser implements ParserInterface
                 }
 
                 $this->includeStack[] = $fullPath;
-                $includedData = $this->parseFileInternal($fullPath);
+
+                if ($this->delegate !== null) {
+                    $includedData = $this->delegate->parseFile($fullPath);
+                    // Standardize: merge files from delegate
+                    foreach ($this->delegate->getParsedFiles() as $pf) {
+                        if (!in_array($pf, $this->allParsedFiles, true)) {
+                            $this->allParsedFiles[] = $pf;
+                        }
+                    }
+                } else {
+                    $includedData = $this->parseFileInternal($fullPath);
+                }
+
                 array_pop($this->includeStack);
 
                 $current = &$stack[count($stack) - 1];
@@ -485,117 +511,6 @@ final class Parser implements ParserInterface
         return $real ?: $path;
     }
 
-    // ── Security & Validation ──────────────────────────────────
-
-    /**
-     * Validate file path for security (prevent path traversal).
-     *
-     * @param string $file
-     * @return void
-     * @throws SecurityException
-     */
-    private function validateFilePath(string $file): void
-    {
-        // Check for path traversal attempts
-        $realPath = realpath($file);
-
-        if ($realPath === false) {
-            throw new SecurityException(
-                "Config file not found or inaccessible: {$file}"
-            );
-        }
-
-        // Check for suspicious patterns
-        if (str_contains($file, '..')) {
-            throw new SecurityException(
-                "Path traversal detected in config file path: {$file}"
-            );
-        }
-
-        // Ensure it's actually a .mlc file
-        if (!str_ends_with($file, '.mlc')) {
-            trigger_error(
-                "Config file '{$file}' does not have .mlc extension",
-                E_USER_NOTICE
-            );
-        }
-    }
-
-    /**
-     * Validate file access permissions.
-     *
-     * @param string $file
-     * @return void
-     * @throws SecurityException
-     */
-    private function validateFileAccess(string $file): void
-    {
-        if (!is_file($file)) {
-            throw new SecurityException(
-                "Config file not found: {$file}"
-            );
-        }
-
-        if (!is_readable($file)) {
-            throw new SecurityException(
-                "Config file not readable: {$file}"
-            );
-        }
-
-        // Check file permissions (warn if too permissive)
-        $perms = fileperms($file);
-        if ($perms !== false) {
-            // Check if world-writable
-            if (($perms & 0002) !== 0) {
-                $message = sprintf(
-                    "Config file '%s' is world-writable (perms: %04o). This is a severe security risk.",
-                    $file,
-                    $perms & 0777
-                );
-
-                if ($this->strictSecurity) {
-                    throw new SecurityException($message);
-                }
-
-                trigger_error($message, E_USER_WARNING);
-            }
-        }
-    }
-
-    /**
-     * Validate file size.
-     *
-     * @param string $file
-     * @return void
-     * @throws SecurityException
-     */
-    private function validateFileSize(string $file): void
-    {
-        $size = @filesize($file);
-
-        if ($size === false) {
-            throw new SecurityException(
-                "Could not determine size of config file: {$file}"
-            );
-        }
-
-        if ($size > self::MAX_FILE_SIZE) {
-            throw new SecurityException(
-                sprintf(
-                    "Config file too large: %d bytes (max: %d bytes)",
-                    $size,
-                    self::MAX_FILE_SIZE
-                )
-            );
-        }
-
-        if ($size === 0) {
-            trigger_error(
-                "Config file '{$file}' is empty",
-                E_USER_NOTICE
-            );
-        }
-    }
 
     // ── Reference Resolution ───────────────────────────────────
 
@@ -705,7 +620,7 @@ final class Parser implements ParserInterface
             return $node;
         }
 
-        $value = $this->env->get($path, null);
-        return ($value === '' || $value === null) ? null : $value;
+        $value = $this->env->get($path, '');
+        return ($value === '') ? null : $value;
     }
 }

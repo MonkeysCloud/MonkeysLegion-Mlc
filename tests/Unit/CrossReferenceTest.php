@@ -6,16 +6,16 @@ namespace MonkeysLegion\Mlc\Tests\Unit;
 
 use MonkeysLegion\Env\Repositories\NativeEnvRepository;
 use PHPUnit\Framework\TestCase;
-use MonkeysLegion\Mlc\Parser;
+use MonkeysLegion\Mlc\Parsers\MlcParser;
 use MonkeysLegion\Mlc\Exception\CircularDependencyException;
 
 class CrossReferenceTest extends TestCase
 {
-    private Parser $parser;
+    private MlcParser $parser;
 
     protected function setUp(): void
     {
-        $this->parser = new Parser(new NativeEnvRepository());
+        $this->parser = new MlcParser(new NativeEnvRepository());
     }
 
     public function test_simple_cross_key_reference_should_work(): void

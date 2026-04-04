@@ -114,19 +114,23 @@ This roadmap outlines the evolution of the MonkeysLegion MLC configuration libra
 ## 🔧 Phase 4: Developer Tooling & DX
 *Focus: Making MLC a joy to work with.*
 
-### 4.1 CLI Validation Tool (`mlc-check`)
-- [ ] **Task**: Build a standalone binary for CI/CD pipelines.
+### 4.1 Native CLI Tool (`mlc-check`)
+- [x] **Task**: Build a standalone binary for config validation.
 - **Technical Detail**:
-    - Use `symfony/console` or a lightweight alternative.
-    - Support `--schema` validation using `MonkeysLegion\Validator`.
-- **Priority**: Low
+    - Build using native PHP `$argv`.
+    - Provide clear exit codes (0 for success, 1 for errors).
+    - Support recursive directory check.
+- **Priority**: Medium
 
-### 4.2 Multi-Format Support
-- [ ] **Task**: Build bridges for JSON, YAML, and PHP arrays.
+### 4.2 Multi-Format Bridge (JSON, PHP, YAML)
+- [x] **Task**: Support loading non-MLC formats.
 - **Technical Detail**:
-    - Enable `Loader->load(['config.mlc', 'legacy.json'])`.
-    - Standardize all formats into the same dot-notation access.
-- **Priority**: Low
+    - `Loader` automatically detects format from extension.
+    - JSON: Using `json_decode`.
+    - PHP: Using `include` (returning arrays).
+    - YAML: Native lightweight parser (no Symfony dependency).
+    - Standardize all into the dot-notation Config engine.
+- **Priority**: Medium
 
 ---
 

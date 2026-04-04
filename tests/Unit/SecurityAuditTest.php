@@ -6,7 +6,7 @@ namespace MonkeysLegion\Mlc\Tests\Unit;
 
 use MonkeysLegion\Env\Repositories\NativeEnvRepository;
 use PHPUnit\Framework\TestCase;
-use MonkeysLegion\Mlc\Parser;
+use MonkeysLegion\Mlc\Parsers\MlcParser;
 use MonkeysLegion\Mlc\Loader;
 use MonkeysLegion\Mlc\Exception\SecurityException;
 
@@ -39,7 +39,7 @@ class SecurityAuditTest extends TestCase
         // Make file world-writable
         chmod($this->tempFile, 0777);
 
-        $parser = new Parser(new NativeEnvRepository());
+        $parser = new MlcParser(new NativeEnvRepository());
 
         // PHPUnit can catch trigger_error via expectWarning
         // Or we can set a custom error handler to verify the exact warning.
@@ -63,7 +63,7 @@ class SecurityAuditTest extends TestCase
     {
         chmod($this->tempFile, 0777);
 
-        $parser = new Parser(new NativeEnvRepository());
+        $parser = new MlcParser(new NativeEnvRepository());
         $parser->enableStrictSecurity();
 
         $this->expectException(SecurityException::class);
@@ -76,7 +76,7 @@ class SecurityAuditTest extends TestCase
     {
         chmod($this->tempFile, 0777);
 
-        $parser = new Parser(new NativeEnvRepository());
+        $parser = new MlcParser(new NativeEnvRepository());
         
         // Pass strictSecurity = true as the 6th argument
         $loader = new Loader(
@@ -97,7 +97,7 @@ class SecurityAuditTest extends TestCase
         // 0644 is user writable, but not group/world writable
         chmod($this->tempFile, 0644);
 
-        $parser = new Parser(new NativeEnvRepository());
+        $parser = new MlcParser(new NativeEnvRepository());
         $parser->enableStrictSecurity();
 
         $data = $parser->parseFile($this->tempFile);

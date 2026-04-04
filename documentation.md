@@ -18,7 +18,9 @@
 10. [Atomic Snapshots](#-atomic-snapshots)
 11. [Schema Validation](#-schema-validation)
 12. [Security Features](#-security-features)
-13. [API Reference](#-api-reference)
+13. [Multi-Format Support](#-multi-format-support)
+14. [CLI Tooling (`mlc-check`)](#-cli-tooling-mlc-check)
+15. [API Reference](#-api-reference)
 
 ---
 
@@ -156,9 +158,9 @@ The `Loader` is the primary entry point. It requires a `Parser` instance and a b
 
 ```php
 use MonkeysLegion\Mlc\Loader;
-use MonkeysLegion\Mlc\Parser;
+use MonkeysLegion\Mlc\Parsers\MlcParser;
 
-$loader = new Loader(new Parser(), __DIR__ . '/config');
+$loader = new Loader(new MlcParser(), __DIR__ . '/config');
 
 // Load and merge one or more named files (without .mlc extension)
 $config = $loader->load(['app', 'database']);
@@ -218,10 +220,10 @@ $config->merge($other);      // new Config with $other merged on top
 ```php
 use MonkeysLegion\Mlc\Cache\CompiledPhpCache;
 use MonkeysLegion\Mlc\Loader;
-use MonkeysLegion\Mlc\Parser;
+use MonkeysLegion\Mlc\Parsers\MlcParser;
 
 $cache  = new CompiledPhpCache('/var/cache/mlc');
-$loader = new Loader(new Parser(), __DIR__ . '/config', cache: $cache);
+$loader = new Loader(new MlcParser(), __DIR__ . '/config', cache: $cache);
 ```
 
 ### Compile once — serve forever
@@ -256,7 +258,7 @@ For environments without OPcache, or where `mtime`-based auto-invalidation is pr
 use MonkeysLegion\Cache\CacheManager;
 
 $cache = (new CacheManager($cacheConfig))->store('redis');
-$loader = new Loader(new Parser(), __DIR__ . '/config', cache: $cache);
+$loader = new Loader(new MlcParser(), __DIR__ . '/config', cache: $cache);
 
 $config = $loader->load(['app']); // auto-invalidates when source files change
 ```
@@ -444,7 +446,44 @@ MLC is designed to be secure by default:
 
 ```php
 // Enable strict security mode
-$loader = new Loader(new Parser(), __DIR__ . '/config', strictSecurity: true);
+$loader = new Loader(new MlcParser(), __DIR__ . '/config', strictSecurity: true);
+```
+
+---
+
+## 📂 Multi-Format Support
+
+MLC supports loading and merging configuration from multiple file formats beyond the native `.mlc` syntax. This is achieved using the `CompositeParser` that delegates to specialized native parsers based on file extensions.
+
+### Supported Formats
+
+| Format   | Extension        | Notes                                   |
+|----------|------------------|-----------------------------------------|
+| **MLC**  | `.mlc`           | Full support (includes, env vars, etc.) |
+| **JSON** | `.json`          | Decoded via `json_decode`.              |
+| **YAML** | `.yaml` / `.yml` | Native lightweight parser.              |
+| **PHP**  | `.php`           | Executed files that `return` an array.  |
+
+See the [Multi-Format Support Documentation](multi_format_support.md) for a deep dive into using the `CompositeParser`.
+
+---
+
+## 🛠️ CLI Tooling (`mlc-check`)
+
+MLC includes a native, standalone CLI validator for your configuration files. It is designed to be used in development and CI/CD pipelines to catch syntax errors or security risks before deployment.
+
+### Features
+- **Zero Dependencies**: Built with native PHP (no `symfony/console`).
+- **Deep Validation**: Checks syntax, circular references, and file permissions.
+- **Recursive Scan**: Validates all `.mlc`, `.json`, `.yaml`, and `.php` files in a directory.
+
+### Usage
+```bash
+# Validate a single file
+php bin/mlc-check ./config/app.mlc
+
+# Validate all supported files in a directory
+php bin/mlc-check ./config
 ```
 
 ---

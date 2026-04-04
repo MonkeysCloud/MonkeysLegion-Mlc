@@ -7,8 +7,7 @@ namespace MonkeysLegion\Mlc\Tests\Unit;
 use MonkeysLegion\Env\Repositories\NativeEnvRepository;
 use PHPUnit\Framework\TestCase;
 use MonkeysLegion\Mlc\Loader;
-use MonkeysLegion\Mlc\Parser;
-use MonkeysLegion\Mlc\Config;
+use MonkeysLegion\Mlc\Parsers\MlcParser;
 use MonkeysLegion\Mlc\Exception\LoaderException;
 use MonkeysLegion\Mlc\Contracts\ConfigValidatorInterface;
 use MonkeysLegion\Mlc\Contracts\CacheInterface;
@@ -16,7 +15,7 @@ use MonkeysLegion\Mlc\Contracts\CacheInterface;
 class LoaderTest extends TestCase
 {
     private string $baseDir;
-    private Parser $parser;
+    private MlcParser $parser;
     private Loader $loader;
     private NativeEnvRepository $env;
 
@@ -26,7 +25,7 @@ class LoaderTest extends TestCase
         mkdir($this->baseDir, 0777, true);
         
         $this->env = new NativeEnvRepository();
-        $this->parser = new Parser($this->env);
+        $this->parser = new MlcParser($this->env);
         $this->loader = new Loader($this->parser, $this->baseDir, autoLoadEnv: false);
     }
 

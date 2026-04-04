@@ -24,7 +24,7 @@ use MonkeysLegion\Mlc\Contracts\CacheInterface;
  *
  * Usage:
  *   // Load environment repository offered by MonkeysLegion-Env
- *   $loader = new Loader(new Parser(new NativeEnvRepository()), '/path/to/config');
+ *   $loader = new Loader(new MlcParser(new NativeEnvRepository()), '/path/to/config');
  *   $config = $loader->load(['app', 'cors']);
  */
 final class Loader implements LoaderInterface
@@ -369,20 +369,28 @@ final class Loader implements LoaderInterface
 
     /**
      * Resolve full path to a config file.
+     *
+     * Tries extensions in order: .mlc, .json, .yaml, .yml, .php
+     * if no extension is provided in $name.
      */
     private function resolveConfigPath(string $name): string
     {
-        $path = $this->baseDir . '/' . $name . '.mlc';
-
-        if (!file_exists($path)) {
-            throw new LoaderException("Config file not found: {$path}");
+        // 1. Check if name already has a supported extension
+        $path = $this->baseDir . '/' . $name;
+        if (preg_match('/\.(mlc|json|yaml|yml|php)$/', $name) && file_exists($path)) {
+            return $path;
         }
 
-        if (!is_readable($path)) {
-            throw new LoaderException("Config file not readable: {$path}");
+        // 2. Try common extensions in priority order
+        $extensions = ['mlc', 'json', 'yaml', 'yml', 'php'];
+        foreach ($extensions as $ext) {
+            $testPath = $this->baseDir . '/' . $name . '.' . $ext;
+            if (file_exists($testPath)) {
+                return $testPath;
+            }
         }
 
-        return $path;
+        throw new LoaderException("Config file not found: {$path} (tried extensions: " . implode(', ', $extensions) . ")");
     }
 
     /**

@@ -6,18 +6,18 @@ namespace MonkeysLegion\Mlc\Tests\Unit;
 
 use MonkeysLegion\Env\Repositories\NativeEnvRepository;
 use PHPUnit\Framework\TestCase;
-use MonkeysLegion\Mlc\Parser;
+use MonkeysLegion\Mlc\Parsers\MlcParser;
 use MonkeysLegion\Mlc\Exception\ParserException;
 
 class IncludeTest extends TestCase
 {
-    private Parser $parser;
+    private MlcParser $parser;
     private string $tempDir;
     private array $tempFiles = [];
 
     protected function setUp(): void
     {
-        $this->parser = new Parser(new NativeEnvRepository());
+        $this->parser = new MlcParser(new NativeEnvRepository());
         $this->tempDir = sys_get_temp_dir() . '/mlc_include_test_' . uniqid();
         mkdir($this->tempDir, 0777, true);
     }
