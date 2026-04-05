@@ -13,6 +13,9 @@
     "parser",
     "cache"
   ],
+  "bin": [
+    "bin/mlc-check"
+  ],
   "require": {
     "php": "^8.4",
     "monkeyscloud/monkeyslegion-cache": "^1.0",
@@ -44,7 +47,7 @@
   },
   "extra": {
     "branch-alias": {
-      "dev-main": "2.0.x-dev"
+      "dev-main": "3.x-dev"
     }
   },
   "config": {

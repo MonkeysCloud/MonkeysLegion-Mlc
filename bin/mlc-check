@@ -36,15 +36,22 @@ use MonkeysLegion\Mlc\Parsers\CompositeParser;
 use MonkeysLegion\Mlc\Exception\ParserException;
 use MonkeysLegion\Mlc\Exception\SecurityException;
 use MonkeysLegion\Env\Repositories\NativeEnvRepository;
+use MonkeysLegion\Env\EnvManager;
+use MonkeysLegion\Env\Loaders\DotenvLoader;
 
 // 2. Initialize Parser
-$mlcParser = new MlcParser(new NativeEnvRepository());
+$env = new EnvManager(new DotenvLoader(), new NativeEnvRepository());
+
+// For validation, we use the current working directory as the "project root"
+$root = getcwd() ?: '.';
+
+$mlcParser = new MlcParser($env, $root);
 
 $parser = new CompositeParser($mlcParser);
 $parser->registerParser('json', new JsonParser());
 $parser->registerParser('yaml', new YamlParser());
 $parser->registerParser('yml', new YamlParser());
-$parser->registerParser('php', new PhpParser());
+$parser->registerParser('php',  new PhpParser($env, $root));
 
 $parser->enableStrictSecurity();
 
