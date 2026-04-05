@@ -4,11 +4,15 @@ declare(strict_types=1);
 
 namespace MonkeysLegion\Mlc;
 
-use Dotenv\Dotenv;
-use Dotenv\Exception\InvalidPathException;
+use MonkeysLegion\Mlc\Config;
+use MonkeysLegion\Mlc\Enums\LoaderHook;
+use MonkeysLegion\Mlc\Exception\ConfigException;
 use MonkeysLegion\Mlc\Exception\LoaderException;
-use MonkeysLegion\Mlc\Validator\ConfigValidator;
-use Psr\SimpleCache\CacheInterface;
+use MonkeysLegion\Mlc\Contracts\ConfigValidatorInterface;
+use MonkeysLegion\Mlc\Contracts\ParserInterface;
+use MonkeysLegion\Mlc\Contracts\LoaderInterface;
+use MonkeysLegion\Mlc\Cache\CompiledPhpCache;
+use MonkeysLegion\Mlc\Contracts\CacheInterface;
 
 /**
  * Production-grade configuration loader.
@@ -20,74 +24,61 @@ use Psr\SimpleCache\CacheInterface;
  * - Hot-reload detection in development
  *
  * Usage:
- *   $loader = new Loader(new Parser(), '/path/to/config');
- *   $config = $loader->load(['app', 'cors']);
+ *   // Bootstrap environment repository via MonkeysLegion-Env
+ *   $env = new EnvManager(new DotenvLoader(), new NativeEnvRepository());
+ *   $parser = new MlcParser($env, $rootPath);
  *
- * With caching (using MonkeysLegion-Cache):
- *   use MonkeysLegion\Cache\CacheManager;
- *   
- *   $cacheConfig = [
- *       'default' => 'file',
- *       'stores' => [
- *           'file' => [
- *               'driver' => 'file',
- *               'path' => '/var/cache/mlc',
- *               'prefix' => 'mlc_',
- *           ]
- *       ]
- *   ];
- *   $cacheManager = new CacheManager($cacheConfig);
- *   $cache = $cacheManager->store('file');
- *   
- *   $loader = new Loader(
- *       new Parser(),
- *       '/path/to/config',
- *       cache: $cache
- *   );
+ *   $loader = new Loader($parser, '/path/to/config');
+ *   $config = $loader->load(['app', 'cors']);
  */
-final class Loader
+final class Loader implements LoaderInterface
 {
+    // ── State ──────────────────────────────────────────────────
+
     /**
      * Whether environment variables have been loaded.
      */
-    private bool $envLoaded = false;
-    private ?ConfigValidator $validator = null;
-    private bool $autoFreeze = true;
+    private ?ConfigValidatorInterface $validator = null;
 
     /**
-     * Loader constructor.
-     *
-     * @param Parser $parser Parser instance
-     * @param string $baseDir Directory containing .mlc files
-     * @param string|null $envDir Directory containing .env files (defaults to baseDir)
-     * @param CacheInterface|null $cache Optional PSR-16 cache implementation
-     * @param bool $autoLoadEnv Automatically load .env files (default: true)
+     * Hook listeners.
+     * @var array<string, callable[]>
+     */
+    private array $listeners = [];
+
+    // ── Lifecycle ──────────────────────────────────────────────
+
+    /**
+     * @param ParserInterface     $parser         Parser implementation
+     * @param string              $baseDir        Directory containing .mlc files
+     * @param CacheInterface|null $cache          Optional PSR-16 cache implementation
+     * @param bool                $strictSecurity Throw exceptions if files are world-writable (default: false)
      */
     public function __construct(
-        private Parser $parser,
+        private ParserInterface $parser,
         private string $baseDir,
-        private ?string $envDir = null,
         private ?CacheInterface $cache = null,
-        private bool $autoLoadEnv = true
+        bool $strictSecurity = false,
     ) {
+        if ($strictSecurity) {
+            $this->parser->enableStrictSecurity();
+        }
+
         // Validate base directory
         if (!is_dir($this->baseDir)) {
             throw new LoaderException(
-                "Config directory not found: {$this->baseDir}"
+                "Config directory not found: {$this->baseDir}",
             );
         }
 
         if (!is_readable($this->baseDir)) {
             throw new LoaderException(
-                "Config directory not readable: {$this->baseDir}"
+                "Config directory not readable: {$this->baseDir}",
             );
         }
-
-        // Auto-load environment if enabled
-        if ($this->autoLoadEnv) {
-            $this->loadEnvironment();
-        }
     }
+
+    // ── Public API ──────────────────────────────────────────────
 
     /**
      * Load and merge multiple named files.
@@ -108,21 +99,35 @@ final class Loader
         // Generate cache key
         $cacheKey = $this->generateCacheKey($names);
 
-        // Try cache first
-        if ($useCache && $this->cache !== null) {
+        // ── Hooks: onLoading ────────────────────────────────────────────────
+        $this->emit(LoaderHook::Loading, $names);
+
+        // ── Fast-path: CompiledPhpCache ─────────────────────────────────────
+        // Compiled cache stores raw arrays — no metadata envelope needed.
+        // OPcache will serve this from shared memory on warm hits.
+        if ($useCache && $this->cache instanceof CompiledPhpCache) {
+            $compiled = $this->cache->get($cacheKey);
+            if (is_array($compiled)) {
+                $config = new Config($compiled);
+                $this->emit(LoaderHook::Loaded, $config);
+                return $config;
+            }
+        }
+
+        // ── Standard PSR-16 cache (envelope with mtime validation) ──────────
+        if ($useCache && $this->cache !== null && !($this->cache instanceof CompiledPhpCache)) {
             try {
                 $cached = $this->cache->get($cacheKey);
-                
-                if ($cached !== null && $this->isCacheValid($names, $cached)) {
-                    $config = new Config($cached['data']);
-                    
-                    if ($this->autoFreeze) {
-                        $config->freeze();
+
+                if (is_array($cached) && $this->isCacheValid($names, $cached)) {
+                    $data = $cached['data'] ?? null;
+                    if (is_array($data)) {
+                        $config = new Config($data);
+                        $this->emit(LoaderHook::Loaded, $config);
+                        return $config;
                     }
-                    
-                    return $config;
                 }
-            } catch (\Throwable $e) {
+            } catch (\Throwable) {
                 // Cache read failed, continue to load from files
             }
         }
@@ -130,13 +135,26 @@ final class Loader
         // Load and merge configs
         $merged = [];
         $files = [];
-        
+
         foreach ($names as $name) {
             $path = $this->resolveConfigPath($name);
-            $files[] = $path;
-            
+
             try {
                 $data = $this->parser->parseFile($path);
+
+                // Always track the main resolved path for cache invalidation
+                $realPath = realpath($path);
+                if ($realPath && !in_array($realPath, $files, true)) {
+                    $files[] = $realPath;
+                }
+
+                // Track ANY sub-files involved (e.g. recursive @includes from MlcParser)
+                foreach ($this->parser->getParsedFiles() as $parsedPath) {
+                    if (!in_array($parsedPath, $files, true)) {
+                        $files[] = $parsedPath;
+                    }
+                }
+
                 $merged = array_replace_recursive($merged, $data);
             } catch (\Throwable $e) {
                 throw new LoaderException(
@@ -151,6 +169,9 @@ final class Loader
         if ($this->validator !== null) {
             $errors = $this->validator->validate($merged);
             if (!empty($errors)) {
+                // ── Hooks: onValidationError ────────────────────────────────────────
+                $this->emit(LoaderHook::ValidationError, $errors, $merged);
+
                 throw new LoaderException(
                     "Config validation failed:\n" . implode("\n", $errors)
                 );
@@ -160,23 +181,28 @@ final class Loader
         // Cache the result
         if ($useCache && $this->cache !== null) {
             try {
-                $this->cache->set($cacheKey, [
-                    'data' => $merged,
-                    'files' => $files,
-                    'mtimes' => $this->getFileMtimes($files),
-                    'timestamp' => time(),
-                ]);
-            } catch (\Throwable $e) {
+                if ($this->cache instanceof CompiledPhpCache) {
+                    // Compiled cache: store the raw array directly — no envelope.
+                    $this->cache->set($cacheKey, $merged);
+                } else {
+                    // Standard PSR-16: store with mtime metadata for invalidation.
+                    $this->cache->set($cacheKey, [
+                        'data'      => $merged,
+                        'files'     => $files,
+                        'mtimes'    => $this->getFileMtimes($files),
+                        'timestamp' => time(),
+                    ]);
+                }
+            } catch (\Throwable) {
                 // Cache write failed, but continue
             }
         }
 
         $config = new Config($merged);
-        
-        if ($this->autoFreeze) {
-            $config->freeze();
-        }
-        
+
+        // ── Hooks: onLoaded ──────────────────────────────────────────────────
+        $this->emit(LoaderHook::Loaded, $config);
+
         return $config;
     }
 
@@ -214,16 +240,22 @@ final class Loader
         }
 
         $cacheKey = $this->generateCacheKey($names);
-        
+
         try {
             $cached = $this->cache->get($cacheKey);
-            
-            if ($cached === null) {
+
+            if (!is_array($cached)) {
                 return true;
             }
-            
+
+            // CompiledPhpCache stores raw bytecode arrays—it doesn't support drift detection.
+            // If the data exists, we assume it's valid.
+            if ($this->cache instanceof CompiledPhpCache) {
+                return false;
+            }
+
             return !$this->isCacheValid($names, $cached);
-        } catch (\Throwable $e) {
+        } catch (\Throwable) {
             return true;
         }
     }
@@ -231,29 +263,10 @@ final class Loader
     /**
      * Set a validator instance.
      */
-    public function setValidator(?ConfigValidator $validator): self
+    public function setValidator(?ConfigValidatorInterface $validator): self
     {
         $this->validator = $validator;
         return $this;
-    }
-
-    /**
-     * Enable/disable auto-freeze.
-     *
-     * When enabled, all loaded configs are frozen automatically.
-     */
-    public function setAutoFreeze(bool $enabled): self
-    {
-        $this->autoFreeze = $enabled;
-        return $this;
-    }
-
-    /**
-     * Check if auto-freeze is enabled.
-     */
-    public function isAutoFreezeEnabled(): bool
-    {
-        return $this->autoFreeze;
     }
 
     /**
@@ -273,123 +286,126 @@ final class Loader
             throw new LoaderException(
                 "Failed to clear cache: {$e->getMessage()}",
                 0,
-                $e
+                $e,
             );
         }
     }
 
     /**
-     * Load environment files.
-     *
-     * Loads in order:
-     * - .env
-     * - .env.local
-     * - .env.{APP_ENV}
-     * - .env.{APP_ENV}.local
-     *
-     * @return void
+     * Trigger fresh parse and write to cache.
      */
-    private function loadEnvironment(): void
+    public function compile(array $names): Config
     {
-        if ($this->envLoaded) {
-            return;
-        }
+        // Force fresh load
+        $config = $this->load($names, useCache: false);
+        $merged = $config->all();
 
-        $dir = $this->envDir ?? $this->baseDir;
-
-        if (!is_dir($dir)) {
-            $this->envLoaded = true;
-            return;
-        }
-
-        // 1. Resolve APP_ENV (checked in this order: Server/Env vars -> .env.local -> .env)
-        $appEnv = $this->resolveAppEnv($dir);
-
-        // 2. Build priority list (Most specific first -> Least specific last)
-        $candidates = [];
-
-        if ($appEnv !== null) {
-            $candidates[] = ".env.{$appEnv}.local";
-            $candidates[] = ".env.{$appEnv}";
-        }
-
-        $candidates[] = '.env.local';
-        $candidates[] = '.env';
-
-        // 3. Filter for existing files
-        $filesToLoad = [];
-        foreach ($candidates as $file) {
-            if (file_exists($dir . '/' . $file)) {
-                $filesToLoad[] = $file;
-            }
-        }
-
-        // 4. Load valid files (Immutability ensures first loaded value wins)
-        if (!empty($filesToLoad)) {
+        // Write to cache
+        if ($this->cache !== null) {
+            $cacheKey = $this->generateCacheKey($names);
             try {
-                // We use load() because we've already vetted file existence
-                Dotenv::createImmutable($dir, $filesToLoad)->load();
-            } catch (InvalidPathException $e) {
-                // Should not happen since we checked file_exists, but safe fallback
+                if ($this->cache instanceof CompiledPhpCache) {
+                    $this->cache->set($cacheKey, $merged);
+                } else {
+                    $files = [];
+                    foreach ($names as $name) {
+                        $path = $this->resolveConfigPath($name);
+                        $realPath = realpath($path);
+                        if ($realPath && !in_array($realPath, $files, true)) {
+                            $files[] = $realPath;
+                        }
+                    }
+
+                    foreach ($this->parser->getParsedFiles() as $pf) {
+                        if (!in_array($pf, $files, true)) {
+                            $files[] = $pf;
+                        }
+                    }
+
+                    $this->cache->set($cacheKey, [
+                        'data'      => $merged,
+                        'files'     => $files,
+                        'mtimes'    => $this->getFileMtimes($files),
+                        'timestamp' => time(),
+                    ]);
+                }
+            } catch (\Throwable $e) {
+                throw new ConfigException("Failed to write cache: {$e->getMessage()}", 0, $e);
             }
         }
 
-        $this->envLoaded = true;
+        return $config;
     }
 
     /**
-     * Resolve APP_ENV without fully loading .env files.
+     * Register a hook listener.
      */
-    private function resolveAppEnv(string $dir): ?string
+    public function on(LoaderHook $hook, callable $callback): self
     {
-        // 1. Check existing environment
-        if (isset($_SERVER['APP_ENV'])) {
-            return (string)$_SERVER['APP_ENV'];
-        }
-        if (isset($_ENV['APP_ENV'])) {
-            return (string)$_ENV['APP_ENV'];
-        }
-
-        // 2. Peek into .env.local and .env
-        $filesToCheck = ['.env.local', '.env'];
-
-        foreach ($filesToCheck as $file) {
-            $path = $dir . '/' . $file;
-            if (!file_exists($path)) {
-                continue;
-            }
-
-            $content = file_get_contents($path);
-            if ($content === false) {
-                continue;
-            }
-
-            // Simple regex to find APP_ENV=value
-            // Supports: APP_ENV=dev, APP_ENV="dev", APP_ENV='dev'
-            if (preg_match('/^\s*APP_ENV=(?:["\']?)([^"\'].+?)(?:["\']?)\s*$/m', $content, $matches)) {
-                return trim($matches[1]);
-            }
-        }
-
-        return null;
+        $this->listeners[$hook->value][] = $callback;
+        return $this;
     }
+
+    /**
+     * Register a listener for the 'onLoading' hook.
+     */
+    public function onLoading(callable $callback): self
+    {
+        return $this->on(LoaderHook::Loading, $callback);
+    }
+
+    /**
+     * Register a listener for the 'onLoaded' hook.
+     */
+    public function onLoaded(callable $callback): self
+    {
+        return $this->on(LoaderHook::Loaded, $callback);
+    }
+
+    /**
+     * Register a listener for the 'onValidationError' hook.
+     */
+    public function onValidationError(callable $callback): self
+    {
+        return $this->on(LoaderHook::ValidationError, $callback);
+    }
+
+    /**
+     * Emit a hook event.
+     */
+    private function emit(LoaderHook $hook, mixed ...$args): void
+    {
+        foreach ($this->listeners[$hook->value] ?? [] as $callback) {
+            $callback(...$args);
+        }
+    }
+
+    // ── Internals ──────────────────────────────────────────────
 
     /**
      * Resolve full path to a config file.
+     *
+     * Tries extensions in order: .mlc, .json, .yaml, .yml, .php
+     * if no extension is provided in $name.
      */
     private function resolveConfigPath(string $name): string
     {
-        $path = $this->baseDir . '/' . $name . '.mlc';
-
-        if (!file_exists($path)) {
-            throw new LoaderException("Config file not found: {$path}");
+        // 1. Check if name already has a supported extension
+        $path = $this->baseDir . '/' . $name;
+        if (preg_match('/\.(mlc|json|yaml|yml|php)$/', $name) && file_exists($path)) {
+            return $path;
         }
 
-        if (!is_readable($path)) {
-            throw new LoaderException("Config file not readable: {$path}");
+        // 2. Try common extensions in priority order
+        $extensions = ['mlc', 'json', 'yaml', 'yml', 'php'];
+        foreach ($extensions as $ext) {
+            $testPath = $this->baseDir . '/' . $name . '.' . $ext;
+            if (file_exists($testPath)) {
+                return $testPath;
+            }
         }
 
-        return $path;
+        throw new LoaderException("Config file not found: {$path} (tried extensions: " . implode(', ', $extensions) . ")");
     }
 
     /**
@@ -410,23 +426,23 @@ final class Loader
      */
     private function isCacheValid(array $names, array $cached): bool
     {
-        if (!isset($cached['files'], $cached['mtimes'])) {
+        if (!isset($cached['files'], $cached['mtimes']) || !is_array($cached['files']) || !is_array($cached['mtimes'])) {
             return false;
         }
 
-        // Check if number of files matches
-        if (count($cached['files']) !== count($names)) {
-            return false;
-        }
+        /** @var array<int|string, mixed> $files */
+        $files = $cached['files'];
+        /** @var array<int|string, mixed> $mtimes */
+        $mtimes = $cached['mtimes'];
 
         // Check if any file has been modified
-        foreach ($cached['files'] as $i => $file) {
-            if (!file_exists($file)) {
+        foreach ($files as $i => $file) {
+            if (!is_string($file) || !file_exists($file)) {
                 return false;
             }
 
             $currentMtime = filemtime($file);
-            if ($currentMtime !== $cached['mtimes'][$i]) {
+            if (!isset($mtimes[$i]) || $currentMtime !== $mtimes[$i]) {
                 return false;
             }
         }

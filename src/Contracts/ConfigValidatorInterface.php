@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace MonkeysLegion\Mlc\Validator;
+namespace MonkeysLegion\Mlc\Contracts;
 
 /**
  * Interface for configuration validators.
  */
-interface ConfigValidator
+interface ConfigValidatorInterface
 {
     /**
      * Validate configuration data.

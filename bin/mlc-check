@@ -1,0 +1,124 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+/**
+ * MonkeysLegion MLC - Native CLI Validator (mlc-check)
+ *
+ * Standalone tool for validating .mlc files without external dependencies.
+ */
+
+// 1. Locate Autoloader
+$autoloadPaths = [
+    __DIR__ . '/../vendor/autoload.php',
+    __DIR__ . '/../../../autoload.php', // If installed as composer package
+];
+
+$autoloader = null;
+foreach ($autoloadPaths as $path) {
+    if (file_exists($path)) {
+        $autoloader = require $path;
+        break;
+    }
+}
+
+if (!$autoloader) {
+    fwrite(STDERR, "\033[31mError: Autoloader not found. Run 'composer install' first.\033[0m\n");
+    exit(1);
+}
+
+use MonkeysLegion\Mlc\Parsers\MlcParser;
+use MonkeysLegion\Mlc\Parsers\JsonParser;
+use MonkeysLegion\Mlc\Parsers\YamlParser;
+use MonkeysLegion\Mlc\Parsers\PhpParser;
+use MonkeysLegion\Mlc\Parsers\CompositeParser;
+use MonkeysLegion\Mlc\Exception\ParserException;
+use MonkeysLegion\Mlc\Exception\SecurityException;
+use MonkeysLegion\Env\Repositories\NativeEnvRepository;
+
+// 2. Initialize Parser
+$mlcParser = new MlcParser(new NativeEnvRepository());
+
+$parser = new CompositeParser($mlcParser);
+$parser->registerParser('json', new JsonParser());
+$parser->registerParser('yaml', new YamlParser());
+$parser->registerParser('yml', new YamlParser());
+$parser->registerParser('php', new PhpParser());
+
+$parser->enableStrictSecurity();
+
+// 3. Argument Parsing
+$args = array_slice($argv, 1);
+
+if (empty($args)) {
+    echo "\033[36mMonkeysLegion MLC Validator (v3.0)\033[0m\n";
+    echo "Usage: mlc-check <file or directory>\n\n";
+    exit(0);
+}
+
+$supportedExtensions = ['mlc', 'json', 'yaml', 'yml', 'php'];
+$filesToCheck = [];
+foreach ($args as $arg) {
+    if (is_file($arg)) {
+        $filesToCheck[] = realpath($arg);
+    } elseif (is_dir($arg)) {
+        $iterator = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($arg, RecursiveDirectoryIterator::SKIP_DOTS)
+        );
+        foreach ($iterator as $file) {
+            /** @var SplFileInfo $file */
+            if (in_array($file->getExtension(), $supportedExtensions, true)) {
+                $filesToCheck[] = $file->getRealPath();
+            }
+        }
+    } else {
+        fwrite(STDERR, "\033[33mWarning: Path not found: {$arg}\033[0m\n");
+    }
+}
+
+$filesToCheck = array_unique($filesToCheck);
+
+if (empty($filesToCheck)) {
+    fwrite(STDERR, "\033[33mNo .mlc files found to validate.\033[0m\n");
+    exit(0);
+}
+
+// 4. Validation Loop
+$errors = 0;
+$successCount = 0;
+
+echo "\033[34mValidating " . count($filesToCheck) . " files...\033[0m\n\n";
+
+foreach ($filesToCheck as $file) {
+    try {
+        $parser->parseFile($file);
+        echo "\033[32m[OK]\033[0m " . basename($file) . " (" . $file . ")\n";
+        $successCount++;
+    } catch (ParserException | SecurityException $e) {
+        $errors++;
+        fwrite(STDERR, "\033[31m[FAIL]\033[0m " . basename($file) . " (" . $file . ")\n");
+        fwrite(STDERR, "       \033[31m" . $e->getMessage() . "\033[0m\n");
+        if ($e instanceof ParserException && method_exists($e, 'getSourceLine')) {
+             $line = $e->getSourceLine();
+             if ($line > 0) {
+                 fwrite(STDERR, "       Line: {$line}\n");
+             }
+        }
+        fwrite(STDERR, "\n");
+    } catch (\Throwable $e) {
+        $errors++;
+        fwrite(STDERR, "\033[31m[ERROR]\033[0m Unexpected error in " . basename($file) . "\n");
+        fwrite(STDERR, "        " . $e->getMessage() . "\n\n");
+    }
+}
+
+// 5. Final Summary
+echo str_repeat('-', 40) . "\n";
+if ($errors === 0) {
+    echo "\033[32mSUCCESS!\033[0m All {$successCount} files are valid.\n";
+    exit(0);
+} else {
+    echo "\033[31mFAILED!\033[0m Found {$errors} errors across " . count($filesToCheck) . " files.\n";
+    exit(1);
+}
