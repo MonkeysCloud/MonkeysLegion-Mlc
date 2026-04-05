@@ -99,16 +99,26 @@ features = [
 
 ### Environment Variable Expansion
 
+Expand environment variables or other configuration keys using the `${VAR}` syntax.
+
+#### Supported Fallback Syntax
+
+You can provide a default value if the variable is not set using the `:-` separator:
+
+- **Strict Types**: Numbers, booleans, and null are correctly typed (e.g., `${DEBUG:-false}` is a `bool`).
+- **Quoted Defaults**: Supports single or double quotes (e.g., `${NAME:-"Guest user"}`).
+- **Nested References**: A default can be another variable (e.g., `${PORT:-\${DEFAULT_PORT:-8080}}`).
+- **Interpolation**: Variables can be mixed with literal strings (e.g., `https://\${HOST:-localhost}`).
+
+Example:
 ```mlc
-# Simple lookup — throws if missing (unless a default is given)
-db_pass = ${DB_PASSWORD}
-
-# Lookup with fallback default
-db_port = ${DB_PORT:-3306}
-
-# Inline interpolation (result is always a string)
-api_url = "https://${HOST:-localhost}:${PORT:-8080}/v1"
+db_pass = \${DB_PASSWORD}
+db_port = \${DB_PORT:-3306}
+api_url = "https://\${HOST:-localhost}:\${PORT:-8080}/v1"
 ```
+
+> [!TIP]
+> Nested references are resolved recursively. If `${PORT}` is missing, it will check `${DEFAULT_PORT}`, and if that's also missing, it will use `8080`.
 
 ### Cross-Key References
 

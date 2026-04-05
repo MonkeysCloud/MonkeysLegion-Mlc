@@ -568,6 +568,12 @@ final class MlcParser implements ParserInterface
                     $node = '';
                 } else {
                     $node = $this->parseValue($resolvedValue);
+                    
+                    // If the result of parseValue is still a string containing ${, 
+                    // we should try resolving it recursively.
+                    if (is_string($node) && str_contains($node, '${')) {
+                        $this->resolveNode($node, $rootData, $resolvingPath);
+                    }
                 }
             } else {
                 $node = $resolvedValue;
