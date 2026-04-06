@@ -2,7 +2,6 @@
 
 Production-grade `.mlc` configuration engine for PHP 8.4+. High-performance, zero-overhead, and enterprise-secure.
 
-[![Tests](https://github.com/monkeyscloud/monkeyslegion-mlc/actions/workflows/tests.yml/badge.svg)](https://github.com/monkeyscloud/monkeyslegion-mlc/actions)
 [![PHP Version](https://img.shields.io/badge/php-%3E%3D%208.4-8892bf.svg)](https://php.net)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
