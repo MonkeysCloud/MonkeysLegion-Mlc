@@ -12,7 +12,7 @@ use MonkeysLegion\Mlc\Contracts\ConfigValidatorInterface;
 use MonkeysLegion\Mlc\Contracts\ParserInterface;
 use MonkeysLegion\Mlc\Contracts\LoaderInterface;
 use MonkeysLegion\Mlc\Cache\CompiledPhpCache;
-use MonkeysLegion\Mlc\Contracts\CacheInterface;
+use Psr\SimpleCache\CacheInterface;
 
 /**
  * Production-grade configuration loader.
