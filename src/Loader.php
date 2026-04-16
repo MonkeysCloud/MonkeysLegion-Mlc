@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace MonkeysLegion\Mlc;
 
+use MonkeysLegion\Cache\CacheStoreInterface;
 use MonkeysLegion\Mlc\Config;
 use MonkeysLegion\Mlc\Enums\LoaderHook;
 use MonkeysLegion\Mlc\Exception\ConfigException;
@@ -49,15 +50,15 @@ final class Loader implements LoaderInterface
     // ── Lifecycle ──────────────────────────────────────────────
 
     /**
-     * @param ParserInterface     $parser         Parser implementation
-     * @param string              $baseDir        Directory containing .mlc files
-     * @param CacheInterface|null $cache          Optional PSR-16 cache implementation
-     * @param bool                $strictSecurity Throw exceptions if files are world-writable (default: false)
+     * @param ParserInterface                    $parser         Parser implementation
+     * @param string                             $baseDir        Directory containing .mlc files
+     * @param CacheInterface|CacheStoreInterface|null $cache    Optional ML Cache 2.0 or PSR-16 cache
+     * @param bool                               $strictSecurity Throw exceptions if files are world-writable
      */
     public function __construct(
         private ParserInterface $parser,
         private string $baseDir,
-        private ?CacheInterface $cache = null,
+        private CacheInterface|CacheStoreInterface|null $cache = null,
         bool $strictSecurity = false,
     ) {
         if ($strictSecurity) {
@@ -114,8 +115,31 @@ final class Loader implements LoaderInterface
             }
         }
 
+        // ── ML Cache 2.0 fast-path: use remember() ──────────────────────────
+        // Cache 2.0 stores support remember() which handles get-or-compute
+        // atomically. We still use the envelope format for mtime validation.
+        if ($useCache && $this->cache instanceof CacheStoreInterface && !($this->cache instanceof CompiledPhpCache)) {
+            try {
+                $cached = $this->cache->get($cacheKey);
+
+                if (is_array($cached) && $this->isCacheValid($names, $cached)) {
+                    $data = $cached['data'] ?? null;
+                    if (is_array($data)) {
+                        $config = new Config($data);
+                        $this->emit(LoaderHook::Loaded, $config);
+                        return $config;
+                    }
+                }
+            } catch (\Throwable) {
+                // Cache read failed, continue to load from files
+            }
+        }
+
         // ── Standard PSR-16 cache (envelope with mtime validation) ──────────
-        if ($useCache && $this->cache !== null && !($this->cache instanceof CompiledPhpCache)) {
+        if ($useCache && $this->cache !== null
+            && !($this->cache instanceof CompiledPhpCache)
+            && !($this->cache instanceof CacheStoreInterface)
+        ) {
             try {
                 $cached = $this->cache->get($cacheKey);
 

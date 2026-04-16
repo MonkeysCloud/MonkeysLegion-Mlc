@@ -18,7 +18,7 @@
   ],
   "require": {
     "php": "^8.4",
-    "monkeyscloud/monkeyslegion-cache": "^1.0",
+    "monkeyscloud/monkeyslegion-cache": "^2.0",
     "monkeyscloud/monkeyslegion-env": "^1.0"
   },
   "require-dev": {
