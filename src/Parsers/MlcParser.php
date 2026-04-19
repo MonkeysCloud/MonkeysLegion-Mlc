@@ -677,7 +677,18 @@ final class MlcParser implements ParserInterface
             return $node;
         }
 
+        // Env vars are always strings — coerce to native types via parseValue()
         $value = $this->env->get($path, '');
-        return ($value === '') ? null : $value;
+        if ($value === '' || $value === null) {
+            return null;
+        }
+
+        // Coerce numeric strings, booleans, etc. to native PHP types
+        try {
+            return $this->parseValue($value);
+        } catch (\Throwable) {
+            // parseValue might throw on edge-case inputs; fall back to raw string
+            return $value;
+        }
     }
 }
