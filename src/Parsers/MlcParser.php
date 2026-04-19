@@ -408,9 +408,12 @@ final class MlcParser implements ParserInterface
             $arrayStartLine = $this->currentLine;
             return;
         }
+        // Strip inline comments (# ...) from unquoted values.
+        // Comments inside quoted strings or env-var expansions are preserved.
+        $trimmed = $this->stripInlineComment($trimmed);
 
         try {
-            $value = $this->parseValue($rawVal);
+            $value = $this->parseValue($trimmed);
         } catch (\Throwable $e) {
             throw new ParserException(
                 "Invalid value for key '{$key}': {$e->getMessage()}",
@@ -508,6 +511,41 @@ final class MlcParser implements ParserInterface
     }
 
     /**
+     * Strip an inline comment from a raw value.
+     *
+     * Handles: `1800  # 30 minutes` → `1800`
+     * Preserves: `"value # with hash"` → `"value # with hash"`
+     * Preserves: `${VAR:default}` → `${VAR:default}`
+     */
+    private function stripInlineComment(string $value): string
+    {
+        // If the value is quoted, don't strip — the comment is inside the string
+        if (preg_match('/^(["\']).*\1$/', $value)) {
+            return $value;
+        }
+
+        // If the value contains braces (env vars, JSON), find # only outside them
+        // Simple heuristic: find the first # that's not inside ${...}
+        $depth = 0;
+        $len = strlen($value);
+        for ($i = 0; $i < $len; $i++) {
+            $ch = $value[$i];
+            if ($ch === '$' && ($i + 1 < $len) && $value[$i + 1] === '{') {
+                $depth++;
+                $i++; // skip '{'
+            } elseif ($ch === '{') {
+                $depth++;
+            } elseif ($ch === '}') {
+                $depth = max(0, $depth - 1);
+            } elseif ($ch === '#' && $depth === 0) {
+                return trim(substr($value, 0, $i));
+            }
+        }
+
+        return $value;
+    }
+
+    /**
      * Resolve an include path relative to the current file.
      */
     private function resolveIncludePath(string $includeFile): string
@@ -554,7 +592,7 @@ final class MlcParser implements ParserInterface
         }
 
         // 1. Standalone expansion (can change type)
-        if (preg_match('/^\$\{(?P<var>[a-zA-Z_0-9\.]+)(?::-(?P<default>.*))?\}$/', $node, $m)) {
+        if (preg_match('/^\$\{(?P<var>[a-zA-Z_0-9\.]+)(?::-?(?P<default>.*))?\}$/', $node, $m)) {
             $var = $m['var'];
             $default = $m['default'] ?? null;
 
@@ -584,7 +622,7 @@ final class MlcParser implements ParserInterface
         // 2. Mixed expansion (always string result)
         if (str_contains($node, '${')) {
             $node = (string) preg_replace_callback(
-                '/\$\{(?P<var>[a-zA-Z_0-9\.]+)(?::-(?P<default>.*))?\}/',
+                '/\$\{(?P<var>[a-zA-Z_0-9\.]+)(?::-?(?P<default>.*))?\}/',
                 function (array $m) use (&$rootData, $resolvingPath) {
                     $var = $m['var'];
                     $default = $m['default'] ?? null;

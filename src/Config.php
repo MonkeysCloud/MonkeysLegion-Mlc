@@ -154,20 +154,23 @@ final class Config
     /**
      * Get a typed integer value. Returns $default when the path is absent.
      *
+     * Coerces numeric strings (common from env-var substitution) to int.
+     *
      * @throws ConfigException When the value exists but is not numeric
      */
     public function getInt(string $path, ?int $default = null): ?int
     {
         $value = $this->get($path, $default);
         if ($value === null) return $default;
-        if (!is_int($value) && !is_numeric($value)) {
-            throw new ConfigException("Config value at '{$path}' must be integer, got " . gettype($value));
-        }
-        return (int) $value;
+        if (is_int($value)) return $value;
+        if (is_numeric($value)) return (int) $value;
+        throw new ConfigException("Config value at '{$path}' must be integer, got " . gettype($value));
     }
 
     /**
      * Get a typed float value. Returns $default when the path is absent.
+     *
+     * Coerces numeric strings (common from env-var substitution) to float.
      *
      * @throws ConfigException When the value exists but is not numeric
      */
@@ -175,25 +178,42 @@ final class Config
     {
         $value = $this->get($path, $default);
         if ($value === null) return $default;
-        if (!is_float($value) && !is_numeric($value)) {
-            throw new ConfigException("Config value at '{$path}' must be float, got " . gettype($value));
-        }
-        return (float) $value;
+        if (is_float($value)) return $value;
+        if (is_numeric($value)) return (float) $value;
+        throw new ConfigException("Config value at '{$path}' must be float, got " . gettype($value));
     }
 
     /**
      * Get a typed boolean value. Returns $default when the path is absent.
      *
-     * @throws ConfigException When the value exists but is not a boolean
+     * Coerces common boolean string representations (from env-var substitution):
+     *   Truthy: 'true', '1', 'yes', 'on'
+     *   Falsy:  'false', '0', 'no', 'off', ''
+     *
+     * @throws ConfigException When the value exists but is not a boolean or coercible string
      */
     public function getBool(string $path, ?bool $default = null): ?bool
     {
         $value = $this->get($path, $default);
         if ($value === null) return $default;
-        if (!is_bool($value)) {
-            throw new ConfigException("Config value at '{$path}' must be boolean, got " . gettype($value));
+        if (is_bool($value)) return $value;
+
+        // Coerce string booleans from env-var substitution
+        if (is_string($value)) {
+            return match (strtolower(trim($value))) {
+                'true', '1', 'yes', 'on'      => true,
+                'false', '0', 'no', 'off', '' => false,
+                default => throw new ConfigException(
+                    "Config value at '{$path}' must be boolean, got non-boolean string '{$value}'",
+                ),
+            };
         }
-        return $value;
+
+        // Integer 1/0 → bool
+        if ($value === 1) return true;
+        if ($value === 0) return false;
+
+        throw new ConfigException("Config value at '{$path}' must be boolean, got " . gettype($value));
     }
 
     /**
