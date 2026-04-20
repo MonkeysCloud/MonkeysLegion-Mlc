@@ -124,6 +124,34 @@ $loader = new Loader($composite, $baseDir);
 // Automatically selects parser based on file extension (.mlc, .json, .yaml)
 ```
 
+## 📝 MLC Syntax at a Glance
+
+MLC provides a developer-friendly syntax that combines the best of INI, JSON, and PHP.
+
+```mlc
+# This is a comment
+app_name = "MonkeysCloud"
+debug    true
+port     8080
+
+# Sections (Nesting)
+database {
+    host = localhost
+    
+    # Environment expansion with fallback
+    pass = ${DB_PASSWORD:-secret}
+    
+    # PHP-style arrays (Single or Double quotes)
+    users = ['admin', 'manager', "guest"]
+}
+
+# Recursively include other files
+@include "env/local.mlc"
+```
+
+> [!TIP]
+> Visit [SYNTAX.md](SYNTAX.md) for the full language specification.
+
 ## 🛡️ Security Features
 
 - **Path Traversal Prevention**: Strict validation of all relative paths.
@@ -141,6 +169,7 @@ php bin/mlc-check ./config
 
 ## 📚 Documentation
 
+- [MLC Syntax Reference](SYNTAX.md)
 - [Full Developer Documentation](documentation.md)
 - [Multi-Format Support Guide](multi_format_support.md)
 - [Upgrading to v3.0.0](UPGRADE.md)

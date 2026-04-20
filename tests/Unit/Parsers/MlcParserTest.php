@@ -241,7 +241,7 @@ class MlcParserTest extends TestCase
     public function test_json_array_decode_failure_should_throw_exception(): void
     {
         $this->expectException(ParserException::class);
-        $this->expectExceptionMessage("Invalid JSON array");
+        $this->expectExceptionMessage("Invalid array syntax");
 
         $content = "items [invalid-json]";
         $this->parser->parseContent($content);
