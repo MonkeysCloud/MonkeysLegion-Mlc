@@ -74,15 +74,24 @@ database {
 
 ### Arrays & JSON Objects
 
+MLC supports both **Standard JSON** and **PHP-style** quoting for data structures.
+
 ```mlc
+# Standard JSON arrays (double quotes)
 allowed_ips = ["127.0.0.1", "10.0.0.1"]
 
-# Multi-line arrays are supported
+# PHP-style arrays (single quotes)
+public_paths = ['/api/v1', '/auth']
+
+# Multi-line arrays are supported with mixed quoting
 features = [
-    "caching",
-    "validation",
+    'caching',
+    'validation',
     "security"
 ]
+
+# Objects also support flexible quoting
+metadata = {"service": "api", 'version': 1}
 ```
 
 ### Supported Value Types

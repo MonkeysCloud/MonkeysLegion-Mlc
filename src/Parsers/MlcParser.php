@@ -471,31 +471,61 @@ final class MlcParser implements ParserInterface
             return str_contains($raw, '.') ? (float)$raw : (int)$raw;
         }
 
-        // JSON-style array
+        // JSON-style array (with PHP-style single quote support)
         if (str_starts_with($raw, '[') && str_ends_with($raw, ']')) {
             try {
                 return json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
             } catch (JsonException $e) {
-                throw new ParserException(
-                    "Invalid JSON array: {$e->getMessage()}",
-                    $this->currentLine,
-                    $this->currentFile,
-                    $e
+                // Attempt to normalize PHP-style single quotes to JSON double quotes
+                $potentialJson = preg_replace_callback(
+                    "/'((?:[^'\\\\]|\\\\.)*)'/",
+                    function ($matches) {
+                        $inner = $matches[1];
+                        // Unescape single quotes and escape double quotes
+                        $inner = str_replace(["\\'", '"'], ["'", '\\"'], $inner);
+                        return '"' . $inner . '"';
+                    },
+                    $raw
                 );
+                
+                try {
+                    return json_decode($potentialJson, true, 512, JSON_THROW_ON_ERROR);
+                } catch (JsonException) {
+                    throw new ParserException(
+                        "Invalid array syntax: {$e->getMessage()}",
+                        $this->currentLine,
+                        $this->currentFile,
+                        $e
+                    );
+                }
             }
         }
 
-        // JSON-style object
+        // JSON-style object (with PHP-style single quote support)
         if (str_starts_with($raw, '{') && str_ends_with($raw, '}')) {
             try {
                 return json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
             } catch (JsonException $e) {
-                throw new ParserException(
-                    "Invalid JSON object: {$e->getMessage()}",
-                    $this->currentLine,
-                    $this->currentFile,
-                    $e
+                $potentialJson = preg_replace_callback(
+                    "/'((?:[^'\\\\]|\\\\.)*)'/",
+                    function ($matches) {
+                        $inner = $matches[1];
+                        $inner = str_replace(["\\'", '"'], ["'", '\\"'], $inner);
+                        return '"' . $inner . '"';
+                    },
+                    $raw
                 );
+                
+                try {
+                    return json_decode($potentialJson, true, 512, JSON_THROW_ON_ERROR);
+                } catch (JsonException) {
+                    throw new ParserException(
+                        "Invalid object syntax: {$e->getMessage()}",
+                        $this->currentLine,
+                        $this->currentFile,
+                        $e
+                    );
+                }
             }
         }
 
