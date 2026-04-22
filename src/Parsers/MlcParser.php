@@ -657,9 +657,35 @@ final class MlcParser implements ParserInterface
                 } else {
                     $node = $this->parseValue($resolvedValue);
                     
-                    // If the result of parseValue is still a string containing ${, 
+                    // If the result of parseValue is still a string containing ${ or env(), 
                     // we should try resolving it recursively.
-                    if (is_string($node) && str_contains($node, '${')) {
+                    if (is_string($node) && (str_contains($node, '${') || str_contains($node, 'env('))) {
+                        $this->resolveNode($node, $rootData, $resolvingPath);
+                    }
+                }
+            } else {
+                $node = $resolvedValue;
+            }
+            return;
+        }
+
+        // 1.1 env() Standalone expansion (supports env(VAR), env("VAR"), env(VAR, "default"))
+        if (preg_match('/^env\(\s*(?P<q1>[\'"]?)(?P<var>[a-zA-Z_0-9\.]+)(?P=q1)\s*(?:,\s*(?P<q2>[\'"]?)(?P<default>.*?)(?P=q2)\s*)?\)$/', $node, $m)) {
+            $var = $m['var'];
+            $default = $m['default'] ?? null;
+
+            $resolvedValue = $this->resolveVariable($var, $rootData, $resolvingPath);
+            if ($resolvedValue === null) {
+                $resolvedValue = $default;
+            }
+
+            if (is_string($resolvedValue)) {
+                if ($resolvedValue === '') {
+                    $node = '';
+                } else {
+                    $node = $this->parseValue($resolvedValue);
+                    
+                    if (is_string($node) && (str_contains($node, '${') || str_contains($node, 'env('))) {
                         $this->resolveNode($node, $rootData, $resolvingPath);
                     }
                 }
@@ -670,12 +696,18 @@ final class MlcParser implements ParserInterface
         }
 
         // 2. Mixed expansion (always string result)
-        if (str_contains($node, '${')) {
+        if (str_contains($node, '${') || str_contains($node, 'env(')) {
             $node = (string) preg_replace_callback(
-                '/\$\{(?P<var>[a-zA-Z_0-9\.]+)(?::-?(?P<default>.*))?\}/',
+                '/\$\{(?P<var>[a-zA-Z_0-9\.]+)(?::-?(?P<default>.*))?\}|env\(\s*(?P<q1>[\'"]?)(?P<var2>[a-zA-Z_0-9\.]+)(?P=q1)\s*(?:,\s*(?P<q2>[\'"]?)(?P<default2>.*?)(?P=q2)\s*)?\)/',
                 function (array $m) use (&$rootData, $resolvingPath) {
-                    $var = $m['var'];
-                    $default = $m['default'] ?? null;
+                    // Check if it was ${} or env()
+                    if (!empty($m['var'])) {
+                        $var = $m['var'];
+                        $default = $m['default'] ?? null;
+                    } else {
+                        $var = $m['var2'];
+                        $default = $m['default2'] ?? null;
+                    }
 
                     $val = $this->resolveVariable($var, $rootData, $resolvingPath);
                     if ($val === null) {

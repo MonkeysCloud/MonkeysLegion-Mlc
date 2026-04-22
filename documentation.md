@@ -126,8 +126,37 @@ db_port = \${DB_PORT:-3306}
 api_url = "https://\${HOST:-localhost}:\${PORT:-8080}/v1"
 ```
 
+### Environment Functions (`env()`)
+
+MLC also supports a functional syntax for environment variables, which is particularly useful when you need to handle complex defaults or prefer a more explicit style.
+
+#### Syntax Guide
+
+| Syntax | Description |
+|---|---|
+| `env(VAR)` | Returns value of `VAR` or `null` if missing. |
+| `env("VAR")` | Quoted keys are supported (single or double). |
+| `env(VAR, default)` | Returns `default` if `VAR` is missing. |
+
+#### Key Features
+
+- **Typesafe Defaults**: Defaults are parsed using the same rules as literal values (e.g., `env(PORT, 8080)` returns an `int`).
+- **Flexible Quoting**: The variable name and the default can be unquoted, single-quoted, or double-quoted.
+- **Mixed Expansion**: Can be used inside strings just like `${}`.
+
+Example:
+```mlc
+# Standalone use
+secret = env(APP_SECRET)
+port   = env(PORT, 8080)
+msg    = env(MSG, "Default message")
+
+# Mixed expansion
+connection = "mysql://env(DB_USER):env(DB_PASS)@env(DB_HOST, localhost):3306"
+```
+
 > [!TIP]
-> Nested references are resolved recursively. If `${PORT}` is missing, it will check `${DEFAULT_PORT}`, and if that's also missing, it will use `8080`.
+> Both `${VAR}` and `env(VAR)` are resolved recursively. If the resolved value contains further expansions, those will also be processed.
 
 ### Cross-Key References
 

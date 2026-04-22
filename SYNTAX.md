@@ -87,6 +87,25 @@ Supported fallback behavior:
 - Nested fallback expressions (e.g. `${PORT:-${DEFAULT_PORT:-8080}}`).
 - Interpolation with surrounding literal text.
 
+### Environment Functions (`env()`)
+
+MLC also supports a functional style for environment variables:
+
+```mlc
+# Simple lookup (returns null if missing)
+key = env(SECRET)
+
+# Quoted keys are allowed
+key = env("SECRET")
+
+# With default values
+port = env(PORT, 8080)
+msg  = env(ERROR_MSG, 'Internal error')
+
+# Used within strings
+url = "http://env(HOST, localhost):env(PORT, 8080)"
+```
+
 ## 6. Cross-Key References
 
 Values can reference keys defined in the same file:
