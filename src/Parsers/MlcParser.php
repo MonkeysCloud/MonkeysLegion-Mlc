@@ -196,8 +196,11 @@ final class MlcParser implements ParserInterface
 
             // If we're in the middle of a multi-line array, accumulate
             if ($inArray) {
-                $arrayRaw .= ' ' . $line;
-                if (str_ends_with($line, ']')) {
+                // Strip inline comments from EACH line of the array
+                $linePart = $this->stripInlineComment($line);
+                $arrayRaw .= " {$linePart}";
+
+                if (str_ends_with($linePart, ']')) {
                     try {
                         $current = &$stack[count($stack) - 1];
                         $current[$arrayKey] = $this->parseValue($arrayRaw);
@@ -553,6 +556,29 @@ final class MlcParser implements ParserInterface
                 }
                 // Otherwise, it's a trailing comma followed by ] or }, return just the ] or }
                 return $matches[2];
+            },
+            $normalized
+        );
+
+        // 3. Quote unquoted MLC values (expansions or identifier-like strings)
+        // Groups:
+        // str: Double-quoted strings (ignore)
+        // exp: Expansions (${...} or env(...))
+        // word: Unquoted word-like strings (e.g. Accept, Content-Type, localhost)
+        $normalized = preg_replace_callback(
+            '/(?P<str>"(?:[^"\\\\]|\\\\.)*")|(?P<exp>\$\{[a-zA-Z_0-9\.]+(?::-?.*?)?\}|env\(\s*(?:[\'"]?)[a-zA-Z_0-9\.]+(?:[\'"]?)\s*(?:,\s*(?:[\'"]?).*?(?:[\'"]?)\s*)?\))|(?P<word>\b(?!(?:true|false|null)\b)[a-zA-Z_][a-zA-Z0-9_\-\.]*\b)/',
+            function ($matches) {
+                if (!empty($matches['str'])) {
+                    return $matches['str'];
+                }
+                if (!empty($matches['exp'])) {
+                    // Use json_encode to safely wrap and escape the expansion
+                    return json_encode($matches['exp']);
+                }
+                if (!empty($matches['word'])) {
+                    return json_encode($matches['word']);
+                }
+                return $matches[0];
             },
             $normalized
         );
